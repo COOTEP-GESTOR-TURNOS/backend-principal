@@ -6,7 +6,7 @@ import type {
   TurnoEntregado,
 } from '../../../application/ports/out/motor-filas.port';
 import type { TipoAtencion } from '../../../domain/tipos';
-import { llamarServicio } from './cliente-servicio';
+import { llamarServicio } from '../../../../compartido/infrastructure/http/cliente-servicio';
 
 /** Adaptador de salida hacia el motor de filas (Spring Boot), contrato en /v3/api-docs. */
 @Injectable()

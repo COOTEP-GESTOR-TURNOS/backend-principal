@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { ServicioNoDisponibleError } from '../../../../compartido/application/errores-aplicacion';
-import { TIEMPO_LIMITE_SERVICIOS_MS } from '../../../../compartido/infrastructure/config';
-import { requestIdActual } from '../../../../compartido/infrastructure/contexto-solicitud';
+import { ServicioNoDisponibleError } from '../../application/errores-aplicacion';
+import { TIEMPO_LIMITE_SERVICIOS_MS } from '../config';
+import { requestIdActual } from '../contexto-solicitud';
 
 export interface Respuesta<T> {
   status: number;

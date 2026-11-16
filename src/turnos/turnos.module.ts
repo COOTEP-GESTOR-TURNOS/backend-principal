@@ -138,5 +138,7 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
       inject: [TURNO_REPOSITORY, EVENT_STORE, NOTIFICADOR, GENERADOR_IDS, RELOJ],
     },
   ],
+  // La analítica reutiliza el catálogo (con su caché) y el reloj para validar filas y horarios.
+  exports: [CATALOGO, RELOJ],
 })
 export class TurnosModule {}

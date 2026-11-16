@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { leerConfig } from '../../../../compartido/infrastructure/config';
 import type { EstimadorPort, ParametrosEspera } from '../../../application/ports/out/estimador.port';
-import { llamarServicio } from './cliente-servicio';
+import { llamarServicio } from '../../../../compartido/infrastructure/http/cliente-servicio';
 
 /** Adaptador de salida hacia la analítica (FastAPI), contrato en /openapi.json. */
 @Injectable()
