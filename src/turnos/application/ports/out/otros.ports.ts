@@ -23,6 +23,25 @@ export interface NotificadorPort {
 /** Datos de catálogo y parámetros de una fila (PostgreSQL con caché). */
 export interface CatalogoPort {
   obtenerFila(agenciaId: string, servicioId: string): Promise<Fila | null>;
+  /** RF-06: agencias con sus servicios, para elegir dónde pedir turno o asignar un funcionario. */
+  listarAgencias(): Promise<AgenciaCatalogo[]>;
+}
+
+export interface ServicioCatalogo {
+  id: string;
+  codigo: string;
+  nombre: string;
+  prefijo: string;
+  ventanillas: number;
+}
+
+export interface AgenciaCatalogo {
+  id: string;
+  codigo: string;
+  nombre: string;
+  municipio: string;
+  activa: boolean;
+  servicios: ServicioCatalogo[];
 }
 
 /** Datos del asociado que usan las reglas (fecha de nacimiento para RN-05). */

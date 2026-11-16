@@ -32,8 +32,9 @@ async function main(): Promise<void> {
     const hash = await new Argon2PasswordAdapter().hash(clave);
     await cliente.query('BEGIN');
     const { rows } = await cliente.query<{ id: string }>(
-      `INSERT INTO usuario (email, nombre, tipo_documento, numero_documento, password_hash, debe_cambiar_password)
-       VALUES ($1, 'Superadministrador', 'CC', '0000000000', $2, true) RETURNING id`,
+      `INSERT INTO usuario (email, nombre, tipo_documento, numero_documento, password_hash,
+                            debe_cambiar_password, email_verificado)
+       VALUES ($1, 'Superadministrador', 'CC', '0000000000', $2, true, true) RETURNING id`,
       [email, hash],
     );
     await cliente.query("INSERT INTO asignacion_rol (usuario_id, rol) VALUES ($1, 'SUPERADMIN')", [rows[0].id]);

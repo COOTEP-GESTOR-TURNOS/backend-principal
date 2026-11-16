@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Pool } from 'pg';
 import { CACHE, CachePort } from '../../../../compartido/application/ports/cache.port';
 import { PG_POOL } from '../../../../compartido/infrastructure/recursos';
-import type { CatalogoPort } from '../../../application/ports/out/otros.ports';
+import type { AgenciaCatalogo, CatalogoPort } from '../../../application/ports/out/otros.ports';
 import { Fila } from '../../../domain/fila';
 
 interface DatosFila {
@@ -47,6 +47,26 @@ export class CatalogoPgAdapter implements CatalogoPort {
       },
       datos.activa,
     );
+  }
+
+  async listarAgencias(): Promise<AgenciaCatalogo[]> {
+    const clave = 'catalogo:agencias';
+    const guardadas = await this.cache.obtener<AgenciaCatalogo[]>(clave);
+    if (guardadas) return guardadas;
+    const { rows } = await this.pool.query<AgenciaCatalogo>(
+      `SELECT a.id, a.codigo, a.nombre, a.municipio, a.activa,
+              COALESCE(json_agg(json_build_object(
+                'id', s.id, 'codigo', s.codigo, 'nombre', s.nombre,
+                'prefijo', s.prefijo_turno, 'ventanillas', x.ventanillas
+              ) ORDER BY s.codigo) FILTER (WHERE s.id IS NOT NULL AND s.activo), '[]') AS servicios
+         FROM agencia a
+         LEFT JOIN agencia_servicio x ON x.agencia_id = a.id
+         LEFT JOIN servicio s ON s.id = x.servicio_id
+        GROUP BY a.id
+        ORDER BY a.codigo`,
+    );
+    await this.cache.guardar(clave, rows, TTL_CATALOGO_SEGUNDOS);
+    return rows;
   }
 
   private async leerDePostgres(agenciaId: string, servicioId: string): Promise<DatosFila | null> {

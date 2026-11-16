@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ATENDER_TURNO, CONFIRMAR_PRESENCIA } from './application/ports/in/atender-turno.use-case';
 import { CANCELAR_TURNO } from './application/ports/in/cancelar-turno.use-case';
+import { CONSULTAR_CATALOGO } from './application/ports/in/consultar-catalogo.use-case';
 import { CONSULTAR_MI_TURNO } from './application/ports/in/consultar-mi-turno.use-case';
 import { LLAMAR_SIGUIENTE } from './application/ports/in/llamar-siguiente.use-case';
 import { SOLICITAR_TURNO } from './application/ports/in/solicitar-turno.use-case';
@@ -23,9 +24,11 @@ import {
 import { TURNO_REPOSITORY, TurnoRepository } from './application/ports/out/turno.repository';
 import { AtenderTurnoService, ConfirmarPresenciaService } from './application/use-cases/atender-turno.service';
 import { CancelarTurnoService } from './application/use-cases/cancelar-turno.service';
+import { ConsultarCatalogoService } from './application/use-cases/consultar-catalogo.service';
 import { ConsultarMiTurnoService } from './application/use-cases/consultar-mi-turno.service';
 import { LlamarSiguienteService } from './application/use-cases/llamar-siguiente.service';
 import { SolicitarTurnoService } from './application/use-cases/solicitar-turno.service';
+import { CatalogoController } from './infrastructure/in/http/catalogo.controller';
 import { FilasController } from './infrastructure/in/http/filas.controller';
 import { TurnosController } from './infrastructure/in/http/turnos.controller';
 import { FilasGateway } from './infrastructure/in/ws/filas.gateway';
@@ -44,7 +47,7 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
  * Para cambiar de tecnología basta con cambiar useClass aquí.
  */
 @Module({
-  controllers: [TurnosController, FilasController],
+  controllers: [TurnosController, FilasController, CatalogoController],
   providers: [
     FilasGateway,
     { provide: TURNO_REPOSITORY, useClass: TurnoPgRepository },
@@ -56,6 +59,11 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
     { provide: NOTIFICADOR, useClass: NotificadorSocketAdapter },
     { provide: RELOJ, useClass: RelojSistema },
     { provide: GENERADOR_IDS, useClass: GeneradorUuid },
+    {
+      provide: CONSULTAR_CATALOGO,
+      useFactory: (catalogo: CatalogoPort) => new ConsultarCatalogoService(catalogo),
+      inject: [CATALOGO],
+    },
     {
       provide: SOLICITAR_TURNO,
       useFactory: (

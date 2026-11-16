@@ -1,6 +1,10 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { ServicioNoDisponibleError } from '../../application/errores-aplicacion';
+import {
+  DemasiadosIntentosError,
+  NoAutenticadoError,
+  ServicioNoDisponibleError,
+} from '../../application/errores-aplicacion';
 import {
   ConflictoError,
   NoEncontradoError,
@@ -41,6 +45,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const respuesta = http.getResponse<Response>();
     const peticion = http.getRequest<Request>();
     const { status, codigo, detalle } = this.traducir(error);
+    if (error instanceof DemasiadosIntentosError && error.reintentarEnSegundos) {
+      respuesta.setHeader('Retry-After', String(error.reintentarEnSegundos));
+    }
 
     respuesta
       .status(status)
@@ -72,6 +79,8 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     if (error instanceof ReglaNegocioError) return { status: 422, codigo: error.codigo, detalle: error.message };
     if (error instanceof NoEncontradoError) return { status: 404, codigo: error.codigo, detalle: error.message };
     if (error instanceof PermisoDenegadoError) return { status: 403, codigo: error.codigo, detalle: error.message };
+    if (error instanceof NoAutenticadoError) return { status: 401, codigo: error.codigo, detalle: error.message };
+    if (error instanceof DemasiadosIntentosError) return { status: 429, codigo: error.codigo, detalle: error.message };
     if (error instanceof ServicioNoDisponibleError) {
       this.logger.warn(error.message);
       return { status: 503, codigo: error.codigo, detalle: error.message };
