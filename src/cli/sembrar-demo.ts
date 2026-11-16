@@ -1,7 +1,8 @@
 /**
  * Crea usuarios ficticios para la demostración (solo fuera de producción):
  * dos asociados (uno adulto mayor), un funcionario y un administrador de la Agencia Mocoa.
- * Las contraseñas se generan al azar y se muestran una sola vez.
+ * Las contraseñas se generan al azar y se muestran una sola vez. La administradora deberá
+ * configurar MFA en su primer ingreso, como cualquier administrador.
  *   npm run demo:sembrar
  */
 import { randomBytes } from 'node:crypto';
@@ -32,8 +33,9 @@ async function main(): Promise<void> {
     for (const u of USUARIOS) {
       const clave = randomBytes(15).toString('base64url'); // 20 caracteres
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO usuario (email, nombre, tipo_documento, numero_documento, fecha_nacimiento, password_hash)
-         VALUES ($1, $2, 'CC', $3, $4, $5)
+        `INSERT INTO usuario (email, nombre, tipo_documento, numero_documento, fecha_nacimiento, password_hash,
+                              email_verificado)
+         VALUES ($1, $2, 'CC', $3, $4, $5, true)
          ON CONFLICT (email) DO NOTHING RETURNING id`,
         [u.email, u.nombre, u.documento, u.nacimiento, await hasher.hash(clave)],
       );

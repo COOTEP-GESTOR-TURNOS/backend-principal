@@ -6,6 +6,7 @@ import type {
   TurnoEntregado,
 } from '../../../application/ports/out/motor-filas.port';
 import type {
+  AgenciaCatalogo,
   CatalogoPort,
   EventStorePort,
   GeneradorIdsPort,
@@ -160,6 +161,20 @@ export class CatalogoEnMemoria implements CatalogoPort {
 
   async obtenerFila(agenciaId: string, servicioId: string): Promise<Fila | null> {
     return this.filas.find((f) => f.agenciaId === agenciaId && f.servicioId === servicioId) ?? null;
+  }
+
+  async listarAgencias(): Promise<AgenciaCatalogo[]> {
+    const ids = [...new Set(this.filas.map((f) => f.agenciaId))];
+    return ids.map((id) => ({
+      id,
+      codigo: id.slice(-4),
+      nombre: `Agencia ${id.slice(-4)}`,
+      municipio: 'Prueba',
+      activa: true,
+      servicios: this.filas
+        .filter((f) => f.agenciaId === id)
+        .map((f) => ({ id: f.servicioId, codigo: f.prefijoTurno, nombre: f.prefijoTurno, prefijo: f.prefijoTurno, ventanillas: f.ventanillas })),
+    }));
   }
 }
 

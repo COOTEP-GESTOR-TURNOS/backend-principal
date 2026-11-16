@@ -7,7 +7,17 @@ export interface PasswordHasherPort {
   verificar(hash: string, clave: string): Promise<boolean>;
 }
 
-export type ProveedorOidc = 'google' | 'microsoft';
+/**
+ * Proveedores OpenID Connect habilitados. Por ahora solo Google: los asociados de una cooperativa
+ * no suelen tener otra cuenta federada. Agregar uno es sumar su nombre aquí, su adaptador y el
+ * valor en el CHECK de identidad_federada.
+ */
+export const PROVEEDORES_OIDC = ['google'] as const;
+export type ProveedorOidc = (typeof PROVEEDORES_OIDC)[number];
+
+export function esProveedorOidc(valor: string): valor is ProveedorOidc {
+  return (PROVEEDORES_OIDC as readonly string[]).includes(valor);
+}
 
 /** Identidad confirmada por el proveedor. No trae roles: el rol se asigna en el sistema. */
 export interface IdentidadExterna {
