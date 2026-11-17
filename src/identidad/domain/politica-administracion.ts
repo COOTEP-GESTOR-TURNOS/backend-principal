@@ -36,6 +36,11 @@ export class PoliticaAdministracion {
     return actor.roles.filter((r) => r.rol === 'ADMIN_AGENCIA' && r.agenciaId).map((r) => r.agenciaId!);
   }
 
+  /** ¿Puede cambiar servicios, ventanillas, horario y parámetros de esta agencia? (RF-17, RN-15) */
+  static puedeAdministrarAgencia(actor: Principal, agenciaId: string): boolean {
+    return this.esSuperadmin(actor) || this.agenciasAdministradas(actor).includes(agenciaId);
+  }
+
   /** ¿Puede el actor asignar o revocar esta asignación? */
   static puedeAsignar(actor: Principal, a: AsignacionRol): boolean {
     if (this.esSuperadmin(actor)) return true;

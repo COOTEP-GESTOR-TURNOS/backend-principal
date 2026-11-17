@@ -17,6 +17,10 @@ interface DatosFila {
 /** 10 minutos: el catálogo cambia muy poco y se consulta en cada solicitud de turno. */
 const TTL_CATALOGO_SEGUNDOS = 600;
 
+/** Claves de caché del catálogo; la administración las borra al cambiar una agencia. */
+export const CLAVE_AGENCIAS = 'catalogo:agencias';
+export const prefijoFilasDe = (agenciaId: string) => `catalogo:fila:${agenciaId}:`;
+
 /** Adaptador de salida: catálogo y parámetros desde PostgreSQL, con cache-aside en Redis. */
 @Injectable()
 export class CatalogoPgAdapter implements CatalogoPort {
@@ -26,7 +30,7 @@ export class CatalogoPgAdapter implements CatalogoPort {
   ) {}
 
   async obtenerFila(agenciaId: string, servicioId: string): Promise<Fila | null> {
-    const clave = `catalogo:fila:${agenciaId}:${servicioId}`;
+    const clave = `${prefijoFilasDe(agenciaId)}${servicioId}`;
     let datos = await this.cache.obtener<DatosFila>(clave);
     if (!datos) {
       datos = await this.leerDePostgres(agenciaId, servicioId);
@@ -50,7 +54,7 @@ export class CatalogoPgAdapter implements CatalogoPort {
   }
 
   async listarAgencias(): Promise<AgenciaCatalogo[]> {
-    const clave = 'catalogo:agencias';
+    const clave = CLAVE_AGENCIAS;
     const guardadas = await this.cache.obtener<AgenciaCatalogo[]>(clave);
     if (guardadas) return guardadas;
     const { rows } = await this.pool.query<AgenciaCatalogo>(
@@ -58,7 +62,7 @@ export class CatalogoPgAdapter implements CatalogoPort {
               COALESCE(json_agg(json_build_object(
                 'id', s.id, 'codigo', s.codigo, 'nombre', s.nombre,
                 'prefijo', s.prefijo_turno, 'ventanillas', x.ventanillas
-              ) ORDER BY s.codigo) FILTER (WHERE s.id IS NOT NULL AND s.activo), '[]') AS servicios
+              ) ORDER BY s.codigo) FILTER (WHERE s.id IS NOT NULL AND s.activo AND x.activo), '[]') AS servicios
          FROM agencia a
          LEFT JOIN agencia_servicio x ON x.agencia_id = a.id
          LEFT JOIN servicio s ON s.id = x.servicio_id
@@ -71,7 +75,7 @@ export class CatalogoPgAdapter implements CatalogoPort {
 
   private async leerDePostgres(agenciaId: string, servicioId: string): Promise<DatosFila | null> {
     const fila = await this.pool.query<{ activa: boolean; prefijo: string; ventanillas: number }>(
-      `SELECT (a.activa AND s.activo) AS activa, s.prefijo_turno AS prefijo, x.ventanillas
+      `SELECT (a.activa AND s.activo AND x.activo) AS activa, s.prefijo_turno AS prefijo, x.ventanillas
          FROM agencia_servicio x
          JOIN agencia a ON a.id = x.agencia_id
          JOIN servicio s ON s.id = x.servicio_id

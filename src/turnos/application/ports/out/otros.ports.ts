@@ -8,6 +8,7 @@ export const CATALOGO = Symbol('CATALOGO');
 export const PERFIL_ASOCIADO = Symbol('PERFIL_ASOCIADO');
 export const RELOJ = Symbol('RELOJ');
 export const GENERADOR_IDS = Symbol('GENERADOR_IDS');
+export const INVALIDADOR_CATALOGO = Symbol('INVALIDADOR_CATALOGO');
 
 /** Historial de eventos (MongoDB). Idempotente por eventoId. */
 export interface EventStorePort {
@@ -42,6 +43,15 @@ export interface AgenciaCatalogo {
   municipio: string;
   activa: boolean;
   servicios: ServicioCatalogo[];
+}
+
+/**
+ * Borra de la caché el catálogo de una agencia (o de todas) cuando la administración cambia
+ * ventanillas, servicios, horario o parámetros: la siguiente lectura va a PostgreSQL.
+ */
+export interface InvalidadorCatalogoPort {
+  invalidarAgencia(agenciaId: string): Promise<void>;
+  invalidarTodo(): Promise<void>;
 }
 
 /** Datos del asociado que usan las reglas (fecha de nacimiento para RN-05). */

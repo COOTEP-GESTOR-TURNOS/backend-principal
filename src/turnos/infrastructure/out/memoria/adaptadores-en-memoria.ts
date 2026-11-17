@@ -159,6 +159,12 @@ export class NotificadorEnMemoria implements NotificadorPort {
 export class CatalogoEnMemoria implements CatalogoPort {
   constructor(private readonly filas: Fila[]) {}
 
+  /** Simula un cambio de la administración ya visible (caché invalidada): misma fila, datos nuevos. */
+  reemplazar(fila: Fila): void {
+    const i = this.filas.findIndex((f) => f.agenciaId === fila.agenciaId && f.servicioId === fila.servicioId);
+    this.filas.splice(i, 1, fila);
+  }
+
   async obtenerFila(agenciaId: string, servicioId: string): Promise<Fila | null> {
     return this.filas.find((f) => f.agenciaId === agenciaId && f.servicioId === servicioId) ?? null;
   }

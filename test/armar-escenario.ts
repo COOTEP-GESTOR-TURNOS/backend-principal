@@ -40,6 +40,8 @@ export function armarEscenario(instante = new Date('2026-11-20T14:00:00Z')) {
   const reloj = new RelojFijo(instante);
 
   return {
+    fila,
+    catalogo,
     turnos,
     motor,
     eventos,
