@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { leerConfig } from '../../../../compartido/infrastructure/config';
 import type {
+  CierreMotor,
   MotorFilasPort,
   ResultadoEncolar,
   TurnoEntregado,
@@ -50,5 +51,18 @@ export class MotorFilasHttpAdapter implements MotorFilasPort {
 
   async retirar(filaId: string, turnoId: string): Promise<void> {
     await this.llamar('DELETE', `/api/v1/filas/${filaId}/turnos/${turnoId}`, undefined, true);
+  }
+
+  async cerrarAgencia(agenciaId: string, servicioIds: string[]): Promise<CierreMotor> {
+    const { datos } = await this.llamar<{ retiradosPorServicio: Record<string, string[]>; duracionMs: number }>(
+      'POST',
+      `/api/v1/agencias/${agenciaId}/cierre`,
+      { servicioIds },
+      true, // vaciar una fila ya vacía no cambia nada
+    );
+    return {
+      retirados: Object.values(datos?.retiradosPorServicio ?? {}).flat(),
+      duracionMs: datos?.duracionMs ?? 0,
+    };
   }
 }

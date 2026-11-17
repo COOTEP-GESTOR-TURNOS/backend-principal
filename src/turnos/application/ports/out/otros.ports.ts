@@ -10,6 +10,7 @@ export const RELOJ = Symbol('RELOJ');
 export const GENERADOR_IDS = Symbol('GENERADOR_IDS');
 export const INVALIDADOR_CATALOGO = Symbol('INVALIDADOR_CATALOGO');
 export const CERROJO = Symbol('CERROJO');
+export const JORNADAS = Symbol('JORNADAS');
 
 /** Historial de eventos (MongoDB). Idempotente por eventoId. */
 export interface EventStorePort {
@@ -62,6 +63,17 @@ export interface InvalidadorCatalogoPort {
 export interface CerrojoPort {
   tomar(nombre: string, ttlSegundos: number): Promise<boolean>;
   soltar(nombre: string): Promise<void>;
+}
+
+/**
+ * Jornadas cerradas antes de su hora (RN-13). El horario dice si la agencia atiende a esta hora;
+ * esta marca dice que hoy ya no recibe más turnos aunque el horario siga abierto.
+ */
+export interface JornadasPort {
+  cerrar(agenciaId: string, fecha: string): Promise<void>;
+  /** true si la jornada estaba cerrada. */
+  reabrir(agenciaId: string, fecha: string): Promise<boolean>;
+  estaCerrada(agenciaId: string, fecha: string): Promise<boolean>;
 }
 
 /** Datos del asociado que usan las reglas (fecha de nacimiento para RN-05). */

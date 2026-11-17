@@ -97,11 +97,13 @@ export class TurnoPgRepository implements TurnoRepository {
     return rows[0] ? aDominio(rows[0]) : null;
   }
 
-  async buscarDelDiaPorEstado(fecha: string, estados: EstadoTurno[]): Promise<Turno[]> {
-    // ix_turno_fila_estado cubre (agencia, servicio, fecha, estado); la revisión es por día y estado.
+  async buscarDelDiaPorEstado(fecha: string, estados: EstadoTurno[], agenciaId?: string): Promise<Turno[]> {
+    // ix_turno_fila_estado cubre (agencia, servicio, fecha, estado): con agencia, la consulta lo usa.
     const { rows } = await this.pool.query<FilaTurno>(
-      'SELECT * FROM turno WHERE fecha = $1 AND estado = ANY($2::text[]) ORDER BY agencia_id, servicio_id, numero',
-      [fecha, estados],
+      `SELECT * FROM turno
+        WHERE fecha = $1 AND estado = ANY($2::text[]) AND ($3::uuid IS NULL OR agencia_id = $3)
+        ORDER BY agencia_id, servicio_id, numero`,
+      [fecha, estados, agenciaId ?? null],
     );
     return rows.map(aDominio);
   }

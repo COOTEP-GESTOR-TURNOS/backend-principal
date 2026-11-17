@@ -1,5 +1,6 @@
 import { ServicioNoDisponibleError } from '../../../compartido/application/errores-aplicacion';
 import { ConflictoError, NoEncontradoError, ReglaNegocioError } from '../../../compartido/domain/errores';
+import { fechaLocal } from '../../../compartido/domain/tiempo';
 import { PoliticaPreferencial } from '../../domain/politica-preferencial';
 import { Turno } from '../../domain/turno';
 import type { SolicitarTurnoComando, SolicitarTurnoUseCase } from '../ports/in/solicitar-turno.use-case';
@@ -8,6 +9,7 @@ import type {
   CatalogoPort,
   EventStorePort,
   GeneradorIdsPort,
+  JornadasPort,
   NotificadorPort,
   PerfilAsociadoPort,
   RelojPort,
@@ -31,6 +33,8 @@ export class SolicitarTurnoService implements SolicitarTurnoUseCase {
     private readonly notificador: NotificadorPort,
     private readonly ids: GeneradorIdsPort,
     private readonly reloj: RelojPort,
+    /** RN-13: si el directivo cerró la jornada antes de la hora, la agencia ya no recibe turnos hoy. */
+    private readonly jornadas?: JornadasPort,
   ) {}
 
   async ejecutar(comando: SolicitarTurnoComando): Promise<ResumenTurno> {
@@ -47,6 +51,9 @@ export class SolicitarTurnoService implements SolicitarTurnoUseCase {
         'AGENCIA_CERRADA',
         `La agencia atiende de ${fila.horario.apertura} a ${fila.horario.cierre}`,
       );
+    }
+    if (await this.jornadas?.estaCerrada(comando.agenciaId, fechaLocal(ahora))) {
+      throw new ReglaNegocioError('JORNADA_CERRADA', 'La agencia cerró la jornada de hoy. Puedes pedir turno en otra agencia o mañana.');
     }
 
     const tipo = PoliticaPreferencial.tipoAtencion({

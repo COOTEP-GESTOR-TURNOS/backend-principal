@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, Inject, Param, ParseUUIDPipe, Patch, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsInt, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import type { Request } from 'express';
 import type { Principal } from '../../../../compartido/domain/principal';
 import { JwtAuthGuard } from '../../../../compartido/infrastructure/auth/jwt-auth.guard';
 import { PrincipalActual, Roles, RolesGuard } from '../../../../compartido/infrastructure/auth/roles';
+import { CERRAR_AGENCIA, type CerrarAgenciaUseCase } from '../../../application/ports/in/cerrar-agencia.use-case';
 import { GESTIONAR_AGENCIAS, type GestionarAgenciasUseCase } from '../../../application/ports/in/gestionar-agencias.use-case';
 
 const CLAVE = /^[A-Z_]{3,40}$/;
@@ -44,7 +45,23 @@ export class ActualizarAgenciaDto {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('SUPERADMIN', 'ADMIN_AGENCIA')
 export class AgenciasAdminController {
-  constructor(@Inject(GESTIONAR_AGENCIAS) private readonly gestionar: GestionarAgenciasUseCase) {}
+  constructor(
+    @Inject(GESTIONAR_AGENCIAS) private readonly gestionar: GestionarAgenciasUseCase,
+    @Inject(CERRAR_AGENCIA) private readonly cerrar: CerrarAgenciaUseCase,
+  ) {}
+
+  @Post('agencias/:id/cierre')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'RN-13: cierra la jornada; los turnos pendientes quedan cancelados y cada asociado recibe el aviso' })
+  cerrarJornada(@PrincipalActual() actor: Principal, @Param('id', new ParseUUIDPipe()) id: string, @Req() req: Request) {
+    return this.cerrar.cerrarJornada(actor, id, req.ip);
+  }
+
+  @Delete('agencias/:id/cierre')
+  @ApiOperation({ summary: 'Deshace el cierre anticipado de hoy: la agencia vuelve a recibir turnos si está en horario' })
+  reabrirJornada(@PrincipalActual() actor: Principal, @Param('id', new ParseUUIDPipe()) id: string, @Req() req: Request) {
+    return this.cerrar.reabrirJornada(actor, id, req.ip);
+  }
 
   @Get('agencias/:id')
   @ApiOperation({ summary: 'Servicios, ventanillas, horario y parámetros efectivos de la agencia' })

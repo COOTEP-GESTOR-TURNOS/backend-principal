@@ -18,6 +18,8 @@ import {
   GENERADOR_IDS,
   GeneradorIdsPort,
   INVALIDADOR_CATALOGO,
+  JORNADAS,
+  JornadasPort,
   NOTIFICADOR,
   NotificadorPort,
   PERFIL_ASOCIADO,
@@ -46,6 +48,7 @@ import { PerfilAsociadoPgAdapter } from './infrastructure/out/postgres/perfil-as
 import { TurnoPgRepository } from './infrastructure/out/postgres/turno-pg.repository';
 import { GeneradorUuid, RelojSistema } from './infrastructure/out/sistema/sistema.adapters';
 import { CerrojoRedisAdapter } from './infrastructure/out/redis/cerrojo-redis.adapter';
+import { JornadasRedisAdapter } from './infrastructure/out/redis/jornadas-redis.adapter';
 import { InvalidadorCatalogoRedisAdapter } from './infrastructure/out/redis/invalidador-catalogo-redis.adapter';
 import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notificador-socket.adapter';
 
@@ -70,6 +73,7 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
     { provide: GENERADOR_IDS, useClass: GeneradorUuid },
     { provide: INVALIDADOR_CATALOGO, useClass: InvalidadorCatalogoRedisAdapter },
     { provide: CERROJO, useClass: CerrojoRedisAdapter },
+    { provide: JORNADAS, useClass: JornadasRedisAdapter },
     {
       provide: REVISAR_VENCIMIENTOS,
       useFactory: (
@@ -100,8 +104,9 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
         notificador: NotificadorPort,
         ids: GeneradorIdsPort,
         reloj: RelojPort,
-      ) => new SolicitarTurnoService(turnos, catalogo, perfiles, motor, eventos, notificador, ids, reloj),
-      inject: [TURNO_REPOSITORY, CATALOGO, PERFIL_ASOCIADO, MOTOR_FILAS, EVENT_STORE, NOTIFICADOR, GENERADOR_IDS, RELOJ],
+        jornadas: JornadasPort,
+      ) => new SolicitarTurnoService(turnos, catalogo, perfiles, motor, eventos, notificador, ids, reloj, jornadas),
+      inject: [TURNO_REPOSITORY, CATALOGO, PERFIL_ASOCIADO, MOTOR_FILAS, EVENT_STORE, NOTIFICADOR, GENERADOR_IDS, RELOJ, JORNADAS],
     },
     {
       provide: CANCELAR_TURNO,
@@ -164,6 +169,7 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
     },
   ],
   // La analítica reutiliza el catálogo (con su caché) y el reloj para validar filas y horarios.
-  exports: [CATALOGO, RELOJ, INVALIDADOR_CATALOGO],
+  // La administración usa estos puertos para el cierre de agencia (RN-13).
+  exports: [CATALOGO, RELOJ, INVALIDADOR_CATALOGO, TURNO_REPOSITORY, MOTOR_FILAS, EVENT_STORE, NOTIFICADOR, GENERADOR_IDS, CERROJO, JORNADAS],
 })
 export class TurnosModule {}

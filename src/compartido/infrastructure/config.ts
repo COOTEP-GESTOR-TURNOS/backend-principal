@@ -18,6 +18,8 @@ export function leerConfig() {
     corsOrigenes: (env.CORS_ORIGENES ?? 'http://localhost:5173').split(','),
     /** Cada cuántos segundos se revisan los vencimientos de turnos (RN-10, RN-11); 0 la apaga. */
     vencimientosIntervaloSeg: Number(env.VENCIMIENTOS_INTERVALO_SEG ?? 30),
+    /** Cada cuántos segundos se buscan agencias que pasaron su hora de cierre (RN-13); 0 lo apaga. */
+    cierreIntervaloSeg: Number(env.CIERRE_INTERVALO_SEG ?? 60),
     /** Dirección de la web: retorno de Google y enlaces de los correos. */
     urlPublica,
     cookieSegura: (env.COOKIE_SEGURA ?? 'true') !== 'false',

@@ -5,6 +5,7 @@ import { PoliticaAdministracion as Politica } from '../../../identidad/domain/po
 import { rolPrincipal } from '../../../identidad/domain/usuario';
 import type { InvalidadorCatalogoPort } from '../../../turnos/application/ports/out/otros.ports';
 import { definicion, PARAMETROS, PoliticaParametros } from '../../domain/parametros';
+import type { CerrarAgenciaUseCase } from '../ports/in/cerrar-agencia.use-case';
 import type { GestionarAgenciasUseCase, VistaAgencia, VistaParametro } from '../ports/in/gestionar-agencias.use-case';
 import type { AgenciasAdminRepository, ConfiguracionAgencia } from '../ports/out/agencias-admin.repository';
 
@@ -37,6 +38,8 @@ export class GestionarAgenciasService implements GestionarAgenciasUseCase {
     private readonly agencias: AgenciasAdminRepository,
     private readonly invalidador: InvalidadorCatalogoPort,
     private readonly auditoria: AuditLogPort,
+    /** Al desactivar una agencia también se cierra su jornada (sus turnos pendientes se cancelan); al activarla, se reabre. */
+    private readonly cierre?: CerrarAgenciaUseCase,
   ) {}
 
   async obtener(actor: Principal, agenciaId: string): Promise<VistaAgencia> {
@@ -106,6 +109,8 @@ export class GestionarAgenciasService implements GestionarAgenciasUseCase {
     await this.invalidador.invalidarAgencia(agenciaId);
     if (antes.activa !== cambios.activa) {
       await this.auditar(actor, cambios.activa ? 'AGENCIA_ACTIVADA' : 'AGENCIA_DESACTIVADA', agenciaId, agenciaId, {}, ip);
+      if (cambios.activa) await this.cierre?.reabrirJornada(actor, agenciaId, ip);
+      else await this.cierre?.cerrarJornada(actor, agenciaId, ip);
     }
     return this.vista(await this.cargar(agenciaId));
   }
@@ -151,6 +156,7 @@ export class GestionarAgenciasService implements GestionarAgenciasUseCase {
       nombre: c.nombre,
       municipio: c.municipio,
       activa: c.activa,
+      jornadaCerrada: (await this.cierre?.jornadaCerrada(c.id)) ?? false,
       servicios: c.servicios,
       parametros: vistaParametros(g, c.parametros),
     };
