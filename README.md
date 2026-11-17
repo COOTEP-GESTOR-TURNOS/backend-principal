@@ -47,11 +47,22 @@ el esquema de `cootep-turno/infra/init/postgres` (se busca junto a este reposito
 arriba; `ESQUEMA_POSTGRES` lo cambia) y prueban el backend real por HTTP: PR-14 (un asociado no
 cancela un turno ajeno) y PR-15 (dos solicitudes simultáneas: una entra y la otra recibe 409).
 
-Para probar la API mientras se implementa el inicio de sesión:
+Para probar la API sin pasar por el inicio de sesión:
 
 ```bash
 npm run demo:sembrar                              # usuarios ficticios con su id
 npm run token:dev -- ASOCIADO <id-del-asociado>   # JWT de prueba (8 h, solo desarrollo)
+```
+
+Para depurar el inicio con MFA (superadministrador y directivos) sin el teléfono, el código TOTP
+del momento (solo desarrollo):
+
+```bash
+npm run totp:dev -- <SECRETO>              # al configurar MFA: el secreto que se ve bajo el QR
+npm run totp:dev -- --correo <correo>      # con MFA ya configurado: descifra el secreto guardado
+# En Docker:
+docker compose -f infra/compose.apps.yml exec -e NODE_ENV=development backend-principal \
+  node dist/cli/codigo-totp.js --correo superadmin@cootep-turno.test
 ```
 
 ## Concurrencia (sección 6 del informe)

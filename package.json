@@ -16,6 +16,7 @@
     "test:integracion": "jest --config test/integracion/jest.config.json --runInBand",
     "test:cov": "jest --coverage",
     "token:dev": "ts-node src/cli/token-desarrollo.ts",
+    "totp:dev": "ts-node src/cli/codigo-totp.ts",
     "demo:sembrar": "ts-node src/cli/sembrar-demo.ts"
   },
   "dependencies": {
