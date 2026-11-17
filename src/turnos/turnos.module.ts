@@ -14,6 +14,7 @@ import {
   EventStorePort,
   GENERADOR_IDS,
   GeneradorIdsPort,
+  INVALIDADOR_CATALOGO,
   NOTIFICADOR,
   NotificadorPort,
   PERFIL_ASOCIADO,
@@ -39,6 +40,7 @@ import { CatalogoPgAdapter } from './infrastructure/out/postgres/catalogo-pg.ada
 import { PerfilAsociadoPgAdapter } from './infrastructure/out/postgres/perfil-asociado-pg.adapter';
 import { TurnoPgRepository } from './infrastructure/out/postgres/turno-pg.repository';
 import { GeneradorUuid, RelojSistema } from './infrastructure/out/sistema/sistema.adapters';
+import { InvalidadorCatalogoRedisAdapter } from './infrastructure/out/redis/invalidador-catalogo-redis.adapter';
 import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notificador-socket.adapter';
 
 /**
@@ -59,6 +61,7 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
     { provide: NOTIFICADOR, useClass: NotificadorSocketAdapter },
     { provide: RELOJ, useClass: RelojSistema },
     { provide: GENERADOR_IDS, useClass: GeneradorUuid },
+    { provide: INVALIDADOR_CATALOGO, useClass: InvalidadorCatalogoRedisAdapter },
     {
       provide: CONSULTAR_CATALOGO,
       useFactory: (catalogo: CatalogoPort) => new ConsultarCatalogoService(catalogo),
@@ -139,6 +142,6 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
     },
   ],
   // La analítica reutiliza el catálogo (con su caché) y el reloj para validar filas y horarios.
-  exports: [CATALOGO, RELOJ],
+  exports: [CATALOGO, RELOJ, INVALIDADOR_CATALOGO],
 })
 export class TurnosModule {}
