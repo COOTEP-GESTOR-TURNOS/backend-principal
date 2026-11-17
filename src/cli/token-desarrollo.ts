@@ -5,8 +5,8 @@
  *   npm run token:dev -- FUNCIONARIO <usuarioId> <agenciaId> [servicioId]
  */
 import { randomUUID } from 'node:crypto';
-import { SignJWT } from 'jose';
-import { AUDIENCIA_TOKENS, EMISOR_TOKENS } from '../compartido/infrastructure/auth/verificador-tokens';
+import type { AsignacionRol } from '../compartido/domain/principal';
+import { firmarTokenDePrueba } from './firmar-token';
 
 async function main(): Promise<void> {
   try {
@@ -19,17 +19,8 @@ async function main(): Promise<void> {
   if (secreto.length < 32) throw new Error('Defina JWT_SECRETO (32 caracteres o más) en .env');
 
   const [rol = 'ASOCIADO', usuarioId = randomUUID(), agenciaId, servicioId] = process.argv.slice(2);
-  const asignacion = { rol, ...(agenciaId ? { agenciaId } : {}), ...(servicioId ? { servicioId } : {}) };
-  const token = await new SignJWT({ roles: [asignacion] })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setSubject(usuarioId)
-    .setIssuer(EMISOR_TOKENS)
-    .setAudience(AUDIENCIA_TOKENS)
-    .setIssuedAt()
-    .setExpirationTime('8h')
-    .setJti(randomUUID())
-    .sign(new TextEncoder().encode(secreto));
-  console.log(token);
+  const asignacion = { rol, ...(agenciaId ? { agenciaId } : {}), ...(servicioId ? { servicioId } : {}) } as AsignacionRol;
+  console.log(await firmarTokenDePrueba(secreto, usuarioId, [asignacion]));
 }
 
 main().catch((error: unknown) => {

@@ -1,0 +1,9 @@
+{
+  "rootDir": "../..",
+  "roots": ["<rootDir>/test/integracion"],
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "testRegex": ".*\\.int-spec\\.ts$",
+  "transform": { "^.+\\.ts$": "ts-jest" },
+  "testEnvironment": "node",
+  "testTimeout": 30000
+}
