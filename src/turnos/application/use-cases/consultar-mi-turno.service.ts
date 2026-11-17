@@ -1,5 +1,6 @@
 import { franjaDe } from '../../../compartido/domain/tiempo';
 import { estimarEsperaMin } from '../../domain/estimacion-espera';
+import { type Combinar, enParalelo } from '../combinar';
 import type { ConsultarMiTurnoUseCase, MiTurno } from '../ports/in/consultar-mi-turno.use-case';
 import type { EstimadorPort } from '../ports/out/estimador.port';
 import type { MotorFilasPort } from '../ports/out/motor-filas.port';
@@ -20,6 +21,8 @@ export class ConsultarMiTurnoService implements ConsultarMiTurnoUseCase {
     private readonly motor: MotorFilasPort,
     private readonly estimador: EstimadorPort,
     private readonly reloj: RelojPort,
+    /** Producción: en paralelo. La medición de la sección 10 lo cambia por enSecuencia. */
+    private readonly combinar: Combinar = enParalelo,
   ) {}
 
   async ejecutar(asociadoId: string): Promise<MiTurno | null> {
@@ -30,10 +33,10 @@ export class ConsultarMiTurnoService implements ConsultarMiTurnoUseCase {
     const fila = await this.catalogo.obtenerFila(turno.agenciaId, turno.servicioId);
     const k = fila?.parametros.maxPreferencialesSeguidos ?? 2;
 
-    const [personas, parametros] = await Promise.allSettled([
-      this.motor.personasDelante(turno.filaId, turno.id, k),
-      this.estimador.parametros(turno.agenciaId, turno.servicioId, franjaDe(ahora)),
-    ]);
+    const [personas, parametros] = await this.combinar(
+      () => this.motor.personasDelante(turno.filaId, turno.id, k),
+      () => this.estimador.parametros(turno.agenciaId, turno.servicioId, franjaDe(ahora)),
+    );
 
     const personasDelante = personas.status === 'fulfilled' ? personas.value : null;
     const datosEspera = parametros.status === 'fulfilled' ? parametros.value : null;
