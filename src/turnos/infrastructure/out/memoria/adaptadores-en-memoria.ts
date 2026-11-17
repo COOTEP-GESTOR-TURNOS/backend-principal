@@ -1,6 +1,7 @@
 import { ConflictoError } from '../../../../compartido/domain/errores';
 import type { EstimadorPort, ParametrosEspera } from '../../../application/ports/out/estimador.port';
 import type {
+  CierreMotor,
   MotorFilasPort,
   ResultadoEncolar,
   TurnoEntregado,
@@ -9,6 +10,7 @@ import type {
   AgenciaCatalogo,
   CatalogoPort,
   CerrojoPort,
+  JornadasPort,
   EventStorePort,
   GeneradorIdsPort,
   NotificadorPort,
@@ -71,9 +73,9 @@ export class TurnoRepositoryEnMemoria implements TurnoRepository {
     return d ? Turno.reconstruir(d) : null;
   }
 
-  async buscarDelDiaPorEstado(fecha: string, estados: string[]): Promise<Turno[]> {
+  async buscarDelDiaPorEstado(fecha: string, estados: string[], agenciaId?: string): Promise<Turno[]> {
     return [...this.datos.values()]
-      .filter((t) => t.fecha === fecha && estados.includes(t.estado))
+      .filter((t) => t.fecha === fecha && estados.includes(t.estado) && (!agenciaId || t.agenciaId === agenciaId))
       .map((t) => Turno.reconstruir(t));
   }
 }
@@ -88,6 +90,19 @@ export class CerrojoEnMemoria implements CerrojoPort {
   }
   async soltar(nombre: string): Promise<void> {
     this.tomados.delete(nombre);
+  }
+}
+
+export class JornadasEnMemoria implements JornadasPort {
+  readonly cerradas = new Set<string>();
+  async cerrar(agenciaId: string, fecha: string): Promise<void> {
+    this.cerradas.add(`${agenciaId}:${fecha}`);
+  }
+  async reabrir(agenciaId: string, fecha: string): Promise<boolean> {
+    return this.cerradas.delete(`${agenciaId}:${fecha}`);
+  }
+  async estaCerrada(agenciaId: string, fecha: string): Promise<boolean> {
+    return this.cerradas.has(`${agenciaId}:${fecha}`);
   }
 }
 
@@ -141,6 +156,21 @@ export class MotorFilasEnMemoria implements MotorFilasPort {
     const fila = this.fila(filaId);
     fila.pref = fila.pref.filter((t) => t.turnoId !== turnoId);
     fila.gen = fila.gen.filter((t) => t.turnoId !== turnoId);
+  }
+
+  caido = false;
+
+  async cerrarAgencia(agenciaId: string, servicioIds: string[]): Promise<CierreMotor> {
+    if (this.caido) throw new Error('Motor de filas caído (simulado)');
+    const retirados: string[] = [];
+    for (const servicioId of servicioIds) {
+      const fila = this.filas.get(`${agenciaId}:${servicioId}`);
+      if (!fila) continue;
+      retirados.push(...fila.pref.map((t) => t.turnoId), ...fila.gen.map((t) => t.turnoId));
+      fila.pref.length = 0;
+      fila.gen.length = 0;
+    }
+    return { retirados, duracionMs: 1 };
   }
 
   private fila(filaId: string) {

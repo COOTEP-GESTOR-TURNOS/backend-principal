@@ -12,6 +12,6 @@ export interface TurnoRepository {
   obtener(id: string): Promise<Turno | null>;
   buscarPorIdempotencia(asociadoId: string, clave: string): Promise<Turno | null>;
   buscarActivoDeAsociado(asociadoId: string): Promise<Turno | null>;
-  /** Turnos de un día (hora local) en esos estados, para la revisión de vencimientos. */
-  buscarDelDiaPorEstado(fecha: string, estados: EstadoTurno[]): Promise<Turno[]>;
+  /** Turnos de un día (hora local) en esos estados; con agencia, solo los de esa agencia (cierre). */
+  buscarDelDiaPorEstado(fecha: string, estados: EstadoTurno[], agenciaId?: string): Promise<Turno[]>;
 }

@@ -25,4 +25,14 @@ export interface MotorFilasPort {
   personasDelante(filaId: string, turnoId: string, maxPreferencialesSeguidos: number): Promise<number | null>;
   /** Idempotente. */
   retirar(filaId: string, turnoId: string): Promise<void>;
+  /**
+   * RN-13: vacía en paralelo las filas de la agencia (un hilo por servicio en el motor) y
+   * devuelve los turnos retirados. Idempotente: una segunda llamada no retira nada.
+   */
+  cerrarAgencia(agenciaId: string, servicioIds: string[]): Promise<CierreMotor>;
+}
+
+export interface CierreMotor {
+  retirados: string[];
+  duracionMs: number;
 }

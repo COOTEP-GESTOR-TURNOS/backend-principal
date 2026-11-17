@@ -26,6 +26,8 @@ export interface VistaAgencia {
   nombre: string;
   municipio: string;
   activa: boolean;
+  /** RN-13: hoy ya no recibe turnos porque se cerró la jornada (a mano o a la hora de cierre). */
+  jornadaCerrada: boolean;
   servicios: ServicioAgencia[];
   parametros: VistaParametro[];
 }
