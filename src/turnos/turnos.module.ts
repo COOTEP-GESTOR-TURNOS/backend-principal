@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ATENDER_TURNO, CONFIRMAR_PRESENCIA } from './application/ports/in/atender-turno.use-case';
 import { CANCELAR_TURNO } from './application/ports/in/cancelar-turno.use-case';
 import { CONSULTAR_CATALOGO } from './application/ports/in/consultar-catalogo.use-case';
+import { REVISAR_VENCIMIENTOS } from './application/ports/in/revisar-vencimientos.use-case';
 import { CONSULTAR_MI_TURNO } from './application/ports/in/consultar-mi-turno.use-case';
 import { LLAMAR_SIGUIENTE } from './application/ports/in/llamar-siguiente.use-case';
 import { SOLICITAR_TURNO } from './application/ports/in/solicitar-turno.use-case';
@@ -10,6 +11,8 @@ import { MOTOR_FILAS, MotorFilasPort } from './application/ports/out/motor-filas
 import {
   CATALOGO,
   CatalogoPort,
+  CERROJO,
+  CerrojoPort,
   EVENT_STORE,
   EventStorePort,
   GENERADOR_IDS,
@@ -26,12 +29,14 @@ import { TURNO_REPOSITORY, TurnoRepository } from './application/ports/out/turno
 import { AtenderTurnoService, ConfirmarPresenciaService } from './application/use-cases/atender-turno.service';
 import { CancelarTurnoService } from './application/use-cases/cancelar-turno.service';
 import { ConsultarCatalogoService } from './application/use-cases/consultar-catalogo.service';
+import { RevisarVencimientosService } from './application/use-cases/revisar-vencimientos.service';
 import { ConsultarMiTurnoService } from './application/use-cases/consultar-mi-turno.service';
 import { LlamarSiguienteService } from './application/use-cases/llamar-siguiente.service';
 import { SolicitarTurnoService } from './application/use-cases/solicitar-turno.service';
 import { CatalogoController } from './infrastructure/in/http/catalogo.controller';
 import { FilasController } from './infrastructure/in/http/filas.controller';
 import { TurnosController } from './infrastructure/in/http/turnos.controller';
+import { VencimientosProgramador } from './infrastructure/in/programador/vencimientos.programador';
 import { FilasGateway } from './infrastructure/in/ws/filas.gateway';
 import { EstimadorHttpAdapter } from './infrastructure/out/http/estimador-http.adapter';
 import { MotorFilasHttpAdapter } from './infrastructure/out/http/motor-filas-http.adapter';
@@ -40,6 +45,7 @@ import { CatalogoPgAdapter } from './infrastructure/out/postgres/catalogo-pg.ada
 import { PerfilAsociadoPgAdapter } from './infrastructure/out/postgres/perfil-asociado-pg.adapter';
 import { TurnoPgRepository } from './infrastructure/out/postgres/turno-pg.repository';
 import { GeneradorUuid, RelojSistema } from './infrastructure/out/sistema/sistema.adapters';
+import { CerrojoRedisAdapter } from './infrastructure/out/redis/cerrojo-redis.adapter';
 import { InvalidadorCatalogoRedisAdapter } from './infrastructure/out/redis/invalidador-catalogo-redis.adapter';
 import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notificador-socket.adapter';
 
@@ -52,6 +58,7 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
   controllers: [TurnosController, FilasController, CatalogoController],
   providers: [
     FilasGateway,
+    VencimientosProgramador,
     { provide: TURNO_REPOSITORY, useClass: TurnoPgRepository },
     { provide: CATALOGO, useClass: CatalogoPgAdapter },
     { provide: PERFIL_ASOCIADO, useClass: PerfilAsociadoPgAdapter },
@@ -62,6 +69,21 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
     { provide: RELOJ, useClass: RelojSistema },
     { provide: GENERADOR_IDS, useClass: GeneradorUuid },
     { provide: INVALIDADOR_CATALOGO, useClass: InvalidadorCatalogoRedisAdapter },
+    { provide: CERROJO, useClass: CerrojoRedisAdapter },
+    {
+      provide: REVISAR_VENCIMIENTOS,
+      useFactory: (
+        turnos: TurnoRepository,
+        catalogo: CatalogoPort,
+        motor: MotorFilasPort,
+        eventos: EventStorePort,
+        notificador: NotificadorPort,
+        ids: GeneradorIdsPort,
+        reloj: RelojPort,
+        cerrojo: CerrojoPort,
+      ) => new RevisarVencimientosService(turnos, catalogo, motor, eventos, notificador, ids, reloj, cerrojo),
+      inject: [TURNO_REPOSITORY, CATALOGO, MOTOR_FILAS, EVENT_STORE, NOTIFICADOR, GENERADOR_IDS, RELOJ, CERROJO],
+    },
     {
       provide: CONSULTAR_CATALOGO,
       useFactory: (catalogo: CatalogoPort) => new ConsultarCatalogoService(catalogo),

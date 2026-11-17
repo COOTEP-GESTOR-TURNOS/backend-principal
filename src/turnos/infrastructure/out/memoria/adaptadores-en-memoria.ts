@@ -8,6 +8,7 @@ import type {
 import type {
   AgenciaCatalogo,
   CatalogoPort,
+  CerrojoPort,
   EventStorePort,
   GeneradorIdsPort,
   NotificadorPort,
@@ -68,6 +69,25 @@ export class TurnoRepositoryEnMemoria implements TurnoRepository {
       (t) => t.asociadoId === asociadoId && Turno.reconstruir(t).estaActivo(),
     );
     return d ? Turno.reconstruir(d) : null;
+  }
+
+  async buscarDelDiaPorEstado(fecha: string, estados: string[]): Promise<Turno[]> {
+    return [...this.datos.values()]
+      .filter((t) => t.fecha === fecha && estados.includes(t.estado))
+      .map((t) => Turno.reconstruir(t));
+  }
+}
+
+/** Cerrojo en memoria: simula a otra instancia que ya tiene la revisión en curso. */
+export class CerrojoEnMemoria implements CerrojoPort {
+  readonly tomados = new Set<string>();
+  async tomar(nombre: string): Promise<boolean> {
+    if (this.tomados.has(nombre)) return false;
+    this.tomados.add(nombre);
+    return true;
+  }
+  async soltar(nombre: string): Promise<void> {
+    this.tomados.delete(nombre);
   }
 }
 

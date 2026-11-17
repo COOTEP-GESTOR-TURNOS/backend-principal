@@ -1,3 +1,4 @@
+import type { EstadoTurno } from '../../../domain/estado-turno';
 import type { Turno } from '../../../domain/turno';
 
 export const TURNO_REPOSITORY = Symbol('TURNO_REPOSITORY');
@@ -11,4 +12,6 @@ export interface TurnoRepository {
   obtener(id: string): Promise<Turno | null>;
   buscarPorIdempotencia(asociadoId: string, clave: string): Promise<Turno | null>;
   buscarActivoDeAsociado(asociadoId: string): Promise<Turno | null>;
+  /** Turnos de un día (hora local) en esos estados, para la revisión de vencimientos. */
+  buscarDelDiaPorEstado(fecha: string, estados: EstadoTurno[]): Promise<Turno[]>;
 }

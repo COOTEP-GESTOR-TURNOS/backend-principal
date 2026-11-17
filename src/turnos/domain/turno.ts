@@ -111,6 +111,9 @@ export class Turno {
   get confirmado(): boolean {
     return this.d.confirmadoEn !== null;
   }
+  get motivo(): string | null {
+    return this.d.motivo;
+  }
   get version(): number {
     return this.d.version;
   }

@@ -9,6 +9,7 @@ export const PERFIL_ASOCIADO = Symbol('PERFIL_ASOCIADO');
 export const RELOJ = Symbol('RELOJ');
 export const GENERADOR_IDS = Symbol('GENERADOR_IDS');
 export const INVALIDADOR_CATALOGO = Symbol('INVALIDADOR_CATALOGO');
+export const CERROJO = Symbol('CERROJO');
 
 /** Historial de eventos (MongoDB). Idempotente por eventoId. */
 export interface EventStorePort {
@@ -52,6 +53,15 @@ export interface AgenciaCatalogo {
 export interface InvalidadorCatalogoPort {
   invalidarAgencia(agenciaId: string): Promise<void>;
   invalidarTodo(): Promise<void>;
+}
+
+/**
+ * Cerrojo distribuido: con varias instancias del backend, solo una revisa los vencimientos en
+ * cada ciclo. Vence solo (TTL) si la instancia que lo tomó se cae.
+ */
+export interface CerrojoPort {
+  tomar(nombre: string, ttlSegundos: number): Promise<boolean>;
+  soltar(nombre: string): Promise<void>;
 }
 
 /** Datos del asociado que usan las reglas (fecha de nacimiento para RN-05). */
