@@ -61,9 +61,14 @@ npm run token:dev -- ASOCIADO <id-del-asociado>   # JWT de prueba (8 h, solo des
 - Unicidad bajo concurrencia: índices únicos de PostgreSQL (`ux_turno_activo_asociado`,
   `ux_turno_idempotencia`) y bloqueo optimista por `version`.
 
+Medición de la sección 10 (la consulta con las dos llamadas en secuencia contra en paralelo, sobre
+el stack de Docker; resultados en `cootep-turno/docs/evidencias/mediciones`):
+
+```bash
+docker compose -f infra/compose.apps.yml exec -T backend-principal \
+  node dist/cli/medir-paralelismo.js <asociadoId-con-turno-activo> 100 10 0 10:00
+```
+
 ## Pendiente
 
-- Módulo de identidad completo (ver `src/identidad/README.md`).
-- `VencimientosScheduler`: marcar ausentes los turnos próximos sin confirmar (RN-10).
 - Reconciliación al arrancar: reponer en Redis los turnos activos de PostgreSQL.
-- Casos de uso administrativos (agencias, servicios, usuarios, parámetros, cierre de agencia) con auditoría.
