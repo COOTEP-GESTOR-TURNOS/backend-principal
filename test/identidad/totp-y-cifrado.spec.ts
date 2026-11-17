@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { AesGcmAdapter } from '../../src/identidad/infrastructure/out/seguridad/aes-gcm.adapter';
-import { base32, desdeBase32, hotp, TotpAdapter } from '../../src/identidad/infrastructure/out/seguridad/totp.adapter';
+import { base32, codigoTotp, desdeBase32, hotp, TotpAdapter } from '../../src/identidad/infrastructure/out/seguridad/totp.adapter';
 
 describe('TOTP (RFC 6238)', () => {
   // Vectores del apéndice B del RFC 6238 con SHA-1: secreto ASCII "12345678901234567890", 8 dígitos.
@@ -29,6 +29,16 @@ describe('TOTP (RFC 6238)', () => {
     expect(totp.verificar(s, hotp(desdeBase32(s), paso + 1), ahora)).toBe(true);
     expect(totp.verificar(s, hotp(desdeBase32(s), paso + 2), ahora)).toBe(false);
     expect(totp.verificar(s, 'abc123', ahora)).toBe(false);
+  });
+
+  it('el comando de depuración da el código que el servidor acepta y cuánto le queda', () => {
+    // Mismo vector del RFC, en 6 dígitos: los últimos 6 de 94287082.
+    expect(codigoTotp('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', new Date(59_000))).toEqual({ codigo: '287082', segundosRestantes: 1 });
+    const totp = new TotpAdapter();
+    const s = totp.generarSecreto();
+    const ahora = new Date('2026-11-17T06:00:10Z');
+    expect(totp.verificar(s, codigoTotp(s, ahora).codigo, ahora)).toBe(true);
+    expect(codigoTotp(s, ahora).segundosRestantes).toBe(20);
   });
 });
 

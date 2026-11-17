@@ -53,6 +53,15 @@ export function hotp(secreto: Buffer, contador: number, digitos = DIGITOS): stri
   return String(binario % 10 ** digitos).padStart(digitos, '0');
 }
 
+/** Código TOTP de un instante y los segundos que le quedan; lo usa el comando de depuración codigo-totp. */
+export function codigoTotp(secreto: string, instante: Date): { codigo: string; segundosRestantes: number } {
+  const segundos = Math.floor(instante.getTime() / 1000);
+  return {
+    codigo: hotp(desdeBase32(secreto), Math.floor(segundos / PASO_SEG)),
+    segundosRestantes: PASO_SEG - (segundos % PASO_SEG),
+  };
+}
+
 /**
  * TOTP (RFC 6238): HOTP con el contador = segundos desde 1970 / 30. Implementado con node:crypto
  * para no depender de librerías externas; las pruebas usan los vectores del RFC.
