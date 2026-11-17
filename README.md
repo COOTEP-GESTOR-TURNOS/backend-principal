@@ -37,8 +37,15 @@ dependencias apuntan hacia el dominio y los casos de uso se prueban con adaptado
 npm ci
 cp .env.example .env          # ajuste las URL de los motores
 npm run start:dev             # http://localhost:3000/api/v1 · OpenAPI en /api/docs
-npm test                      # pruebas unitarias con Jest
+npm test                      # unitarias + integración (necesita Docker en marcha)
+npm run test:unit             # solo unitarias, sin Docker (adaptadores en memoria)
+npm run test:integracion      # solo integración: PostgreSQL y Redis con Testcontainers
 ```
+
+Las pruebas de integración (`test/integracion`) levantan PostgreSQL y Redis en contenedores con
+el esquema de `cootep-turno/infra/init/postgres` (se busca junto a este repositorio o un nivel
+arriba; `ESQUEMA_POSTGRES` lo cambia) y prueban el backend real por HTTP: PR-14 (un asociado no
+cancela un turno ajeno) y PR-15 (dos solicitudes simultáneas: una entra y la otra recibe 409).
 
 Para probar la API mientras se implementa el inicio de sesión:
 

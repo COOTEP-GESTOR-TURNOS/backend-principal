@@ -1,12 +1,11 @@
 import 'reflect-metadata';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { leerConfig } from './compartido/infrastructure/config';
-import { middlewareRequestId } from './compartido/infrastructure/contexto-solicitud';
-import { ProblemDetailsFilter } from './compartido/infrastructure/http/problem-details.filter';
+import { configurarApp } from './configurar-app';
 import { AesGcmAdapter } from './identidad/infrastructure/out/seguridad/aes-gcm.adapter';
 
 async function arrancar(): Promise<void> {
@@ -22,15 +21,7 @@ async function arrancar(): Promise<void> {
   }
   AesGcmAdapter.leerClave(config.claveCifradoMfa); // falla al arrancar si CLAVE_CIFRADO_MFA no sirve
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  // nginx (web) está en la red interna: se confía en su X-Forwarded-For para obtener la IP real,
-  // que usa el límite de intentos de inicio de sesión.
-  app.set('trust proxy', 'loopback, uniquelocal');
-  app.use(middlewareRequestId);
-  app.setGlobalPrefix('api/v1');
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
-  app.useGlobalFilters(new ProblemDetailsFilter());
-  app.enableCors({ origin: config.corsOrigenes, credentials: true });
+  const app = configurarApp(await NestFactory.create<NestExpressApplication>(AppModule));
   app.enableShutdownHooks();
 
   const documento = SwaggerModule.createDocument(
