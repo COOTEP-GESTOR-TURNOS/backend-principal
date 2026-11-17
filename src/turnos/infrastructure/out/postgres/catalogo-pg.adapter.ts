@@ -48,6 +48,8 @@ export class CatalogoPgAdapter implements CatalogoPort {
         nProximo: Number(p.N_PROXIMO ?? 3),
         maxPreferencialesSeguidos: Number(p.MAX_PREFERENCIALES_SEGUIDOS ?? 2),
         edadAdultoMayor: Number(p.EDAD_ADULTO_MAYOR ?? 60),
+        tConfirmacionMin: Number(p.T_CONFIRMACION_MIN ?? 5),
+        tLlamadoMin: Number(p.T_LLAMADO_MIN ?? 3),
       },
       datos.activa,
     );

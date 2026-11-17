@@ -16,6 +16,8 @@ export function leerConfig() {
     serviceToken: env.SERVICE_TOKEN ?? '',
     jwtSecreto: env.JWT_SECRETO ?? '',
     corsOrigenes: (env.CORS_ORIGENES ?? 'http://localhost:5173').split(','),
+    /** Cada cuántos segundos se revisan los vencimientos de turnos (RN-10, RN-11); 0 la apaga. */
+    vencimientosIntervaloSeg: Number(env.VENCIMIENTOS_INTERVALO_SEG ?? 30),
     /** Dirección de la web: retorno de Google y enlaces de los correos. */
     urlPublica,
     cookieSegura: (env.COOKIE_SEGURA ?? 'true') !== 'false',

@@ -42,6 +42,7 @@ export function armarEscenario(instante = new Date('2026-11-20T14:00:00Z')) {
   return {
     fila,
     catalogo,
+    ids,
     turnos,
     motor,
     eventos,

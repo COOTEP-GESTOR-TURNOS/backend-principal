@@ -11,6 +11,8 @@ export interface ResumenTurno {
   agenciaId: string;
   servicioId: string;
   personasDelante: number | null;
+  /** Por qué terminó: CANCELADO_POR_ASOCIADO, SIN_CONFIRMAR, NO_SE_PRESENTO, ... */
+  motivo: string | null;
 }
 
 export function resumir(turno: Turno, personasDelante: number | null): ResumenTurno {
@@ -22,5 +24,6 @@ export function resumir(turno: Turno, personasDelante: number | null): ResumenTu
     agenciaId: turno.agenciaId,
     servicioId: turno.servicioId,
     personasDelante,
+    motivo: turno.motivo,
   };
 }
