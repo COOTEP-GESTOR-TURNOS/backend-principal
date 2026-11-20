@@ -13,7 +13,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { Principal } from '../../../../compartido/domain/principal';
 import { JwtAuthGuard } from '../../../../compartido/infrastructure/auth/jwt-auth.guard';
@@ -22,7 +22,7 @@ import {
   ADMINISTRAR_USUARIOS,
   type AdministrarUsuariosUseCase,
 } from '../../../application/ports/in/administrar-usuarios.use-case';
-import { ActualizarUsuarioDto, AsignarRolDto, CrearUsuarioDto, ListarUsuariosQuery } from './dtos';
+import { ActualizarUsuarioDto, AsignarRolDto, CrearUsuarioDto, ListarUsuariosQuery, PaginaUsuariosDto } from './dtos';
 
 /**
  * Adaptador de entrada REST de la administración de usuarios. El guard deja pasar a los dos
@@ -38,6 +38,7 @@ export class UsuariosAdminController {
 
   @Get()
   @ApiOperation({ summary: 'Usuarios de su ámbito, con búsqueda y paginación' })
+  @ApiOkResponse({ type: PaginaUsuariosDto })
   listar(@PrincipalActual() actor: Principal, @Query() q: ListarUsuariosQuery) {
     return this.administrar.listar(actor, q);
   }

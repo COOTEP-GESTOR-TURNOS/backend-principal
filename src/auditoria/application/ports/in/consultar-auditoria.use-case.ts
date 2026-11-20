@@ -16,6 +16,7 @@ export interface EntradaVista {
 export interface ResultadoAuditoria {
   entradas: EntradaVista[];
   siguiente: string | null;
+  limite: number;
 }
 
 /** Puerto de entrada (RF-20, CU-06): el superadministrador consulta la auditoría; no hay forma de editarla. */

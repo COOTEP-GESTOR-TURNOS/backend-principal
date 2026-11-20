@@ -1,5 +1,6 @@
 import type { AuditLogPort } from '../../../auditoria/application/ports/out/audit-log.port';
 import { NoEncontradoError, PermisoDenegadoError, ReglaNegocioError } from '../../../compartido/domain/errores';
+import { metadatosPagina, resolverPagina } from '../../../compartido/domain/paginacion';
 import type { AsignacionRol, Principal } from '../../../compartido/domain/principal';
 import type { CuentasUseCase } from '../../../identidad/application/ports/in/cuentas.use-case';
 import type { SesionesPort } from '../../../identidad/application/ports/out/sesiones.port';
@@ -64,8 +65,9 @@ export class AdministrarUsuariosService implements AdministrarUsuariosUseCase {
       }
       agencias = f.agenciaId ? [f.agenciaId] : propias;
     }
-    const pagina = await this.usuarios.listar({ ...f, texto: f.texto?.trim() || undefined, agencias });
-    return { elementos: pagina.elementos.map(aFicha), total: pagina.total, pagina: f.pagina, tamano: f.tamano };
+    const { pagina, tamano } = resolverPagina(f);
+    const { elementos, total } = await this.usuarios.listar({ ...f, pagina, tamano, texto: f.texto?.trim() || undefined, agencias });
+    return { elementos: elementos.map(aFicha), ...metadatosPagina({ pagina, tamano }, total) };
   }
 
   async obtener(actor: Principal, id: string): Promise<FichaUsuario> {

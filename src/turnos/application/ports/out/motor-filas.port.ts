@@ -1,3 +1,4 @@
+import type { Paginacion, SolicitudPagina } from '../../../../compartido/domain/paginacion';
 import type { TipoAtencion } from '../../../domain/tipos';
 
 export const MOTOR_FILAS = Symbol('MOTOR_FILAS');
@@ -13,6 +14,10 @@ export interface TurnoEntregado {
   tipoAtencion: TipoAtencion;
 }
 
+export interface PaginaTurnos extends Paginacion {
+  elementos: TurnoEntregado[];
+}
+
 /**
  * Puerto de salida hacia el motor de filas (servicio Spring Boot).
  * El dominio define qué necesita; el adaptador HTTP decide cómo se pide.
@@ -22,6 +27,7 @@ export interface MotorFilasPort {
   encolar(filaId: string, turnoId: string, tipo: TipoAtencion, maxPreferencialesSeguidos: number): Promise<ResultadoEncolar>;
   /** Atómico (RN-08, RN-09): dos funcionarios nunca reciben el mismo turno. */
   siguiente(filaId: string, maxPreferencialesSeguidos: number): Promise<TurnoEntregado | null>;
+  listar(filaId: string, maxPreferencialesSeguidos: number, solicitud: SolicitudPagina): Promise<PaginaTurnos>;
   personasDelante(filaId: string, turnoId: string, maxPreferencialesSeguidos: number): Promise<number | null>;
   /** Idempotente. */
   retirar(filaId: string, turnoId: string): Promise<void>;

@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { Client as ClienteCassandra, types } from 'cassandra-driver';
-import { ServicioNoDisponibleError } from '../../../compartido/application/errores-aplicacion';
+import { Client as ClienteCassandra, errors, types } from 'cassandra-driver';
+import { DatosInvalidosError, ServicioNoDisponibleError } from '../../../compartido/application/errores-aplicacion';
 import { CASSANDRA } from '../../../compartido/infrastructure/recursos';
 import type {
   AuditoriaLecturaPort,
@@ -85,6 +85,14 @@ export class AuditoriaLecturaCassandraAdapter implements AuditoriaLecturaPort {
         ...(opciones.siguiente ? { pageState: opciones.siguiente } : {}),
       });
     } catch (error) {
+      if (
+        opciones.siguiente &&
+        error instanceof errors.ResponseError &&
+        error.code === types.responseErrorCodes.protocolError &&
+        error.message === 'Invalid value for the paging state'
+      ) {
+        throw new DatosInvalidosError('CURSOR_AUDITORIA_INVALIDO', 'El cursor de auditoría no es válido. Vuelve a la primera página.');
+      }
       throw new ServicioNoDisponibleError(`No se pudo leer la auditoría: ${String(error)}`);
     }
   }

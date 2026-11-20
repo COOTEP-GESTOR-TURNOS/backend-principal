@@ -40,8 +40,38 @@ describe('RF-19: indicadores con el ámbito del administrador', () => {
     const t = await servicio.ejecutar(superadmin, {});
     expect(t.ambito).toBe('GLOBAL');
     expect(t.agencias.map((a) => a.agenciaId)).toEqual([MOCOA, ORITO]);
+    expect(t).not.toHaveProperty('paginacion');
     // Espera ponderada por atendidos: (10·300 + 2·100) / 400 = 8; preferencial por todos los turnos: (0,2·400 + 0,1·100) / 500.
     expect(t.total).toEqual({ atendidos: 400, cancelados: 40, ausentes: 60, esperaPromedioMin: 8, atencionPromedioMin: 5.5, proporcionPreferencial: 0.18 });
+  });
+
+  it('pagina las agencias en el orden del catálogo y conserva el total de todo el ámbito', async () => {
+    const { servicio } = armar();
+    const actor: Principal = { ...directivoMocoa, roles: [{ rol: 'ADMIN_AGENCIA', agenciaId: ORITO }, ...directivoMocoa.roles] };
+    const primera = await servicio.ejecutar(actor, { tamano: 1 });
+    const segunda = await servicio.ejecutar(actor, { pagina: 2, tamano: 1 });
+    const fuera = await servicio.ejecutar(actor, { pagina: 3, tamano: 1 });
+
+    expect(primera).toMatchObject({
+      agencias: [{ agenciaId: MOCOA }],
+      paginacion: { pagina: 1, tamano: 1, total: 2, totalPaginas: 2 },
+    });
+    expect(segunda).toMatchObject({
+      agencias: [{ agenciaId: ORITO }],
+      paginacion: { pagina: 2, tamano: 1, total: 2, totalPaginas: 2 },
+    });
+    expect(fuera.agencias).toEqual([]);
+    expect(primera.total.atendidos).toBe(400);
+    expect(segunda.total).toEqual(primera.total);
+    expect(fuera.total).toEqual(primera.total);
+  });
+
+  it('aplica el tamaño predeterminado y respeta el filtro y los permisos de agencia', async () => {
+    const { servicio } = armar();
+    const t = await servicio.ejecutar(directivoMocoa, { pagina: 1, agenciaId: MOCOA });
+    expect(t.agencias.map((a) => a.agenciaId)).toEqual([MOCOA]);
+    expect(t.paginacion).toEqual({ pagina: 1, tamano: 20, total: 1, totalPaginas: 1 });
+    await expect(servicio.ejecutar(directivoMocoa, { pagina: 2, agenciaId: ORITO })).rejects.toBeInstanceOf(PermisoDenegadoError);
   });
 
   it('por defecto toma los últimos 30 días hasta hoy en Colombia', async () => {

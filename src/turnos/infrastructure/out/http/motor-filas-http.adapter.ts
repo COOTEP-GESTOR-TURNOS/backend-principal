@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { resolverPagina, type SolicitudPagina } from '../../../../compartido/domain/paginacion';
 import { leerConfig } from '../../../../compartido/infrastructure/config';
 import type {
   CierreMotor,
   MotorFilasPort,
+  PaginaTurnos,
   ResultadoEncolar,
   TurnoEntregado,
 } from '../../../application/ports/out/motor-filas.port';
@@ -36,6 +38,18 @@ export class MotorFilasHttpAdapter implements MotorFilasPort {
       { maxPreferencialesSeguidos: k },
       false,
     );
+    return datos;
+  }
+
+  async listar(filaId: string, k: number, solicitud: SolicitudPagina): Promise<PaginaTurnos> {
+    const { pagina, tamano } = resolverPagina(solicitud);
+    const { datos } = await this.llamar<PaginaTurnos>(
+      'GET',
+      `/api/v1/filas/${filaId}/turnos?k=${k}&pagina=${pagina}&tamano=${tamano}`,
+      undefined,
+      true,
+    );
+    if (!datos) throw new Error('El motor de filas no devolvió la página de turnos');
     return datos;
   }
 

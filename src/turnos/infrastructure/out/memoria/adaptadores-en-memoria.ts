@@ -1,8 +1,10 @@
 import { ConflictoError } from '../../../../compartido/domain/errores';
+import { metadatosPagina, resolverPagina, type SolicitudPagina } from '../../../../compartido/domain/paginacion';
 import type { EstimadorPort, ParametrosEspera } from '../../../application/ports/out/estimador.port';
 import type {
   CierreMotor,
   MotorFilasPort,
+  PaginaTurnos,
   ResultadoEncolar,
   TurnoEntregado,
 } from '../../../application/ports/out/motor-filas.port';
@@ -111,6 +113,10 @@ interface EnFila {
   numero: number;
 }
 
+function salePreferencial(preferenciales: number, generales: number, racha: number, k: number): boolean {
+  return preferenciales > 0 && (racha < k || generales === 0);
+}
+
 /** Misma regla que el script Lua del motor de filas, para probar los casos de uso. */
 export class MotorFilasEnMemoria implements MotorFilasPort {
   private readonly filas = new Map<string, { pref: EnFila[]; gen: EnFila[]; seq: number; racha: number }>();
@@ -135,12 +141,37 @@ export class MotorFilasEnMemoria implements MotorFilasPort {
 
   async siguiente(filaId: string, k: number): Promise<TurnoEntregado | null> {
     const fila = this.fila(filaId);
-    const usarPref = fila.pref.length > 0 && (fila.racha < k || fila.gen.length === 0);
+    const usarPref = salePreferencial(fila.pref.length, fila.gen.length, fila.racha, k);
     const origen = usarPref ? fila.pref : fila.gen;
     const turno = origen.shift();
     if (!turno) return null;
     fila.racha = usarPref ? fila.racha + 1 : 0;
     return { turnoId: turno.turnoId, numero: turno.numero, tipoAtencion: usarPref ? 'PREFERENCIAL' : 'GENERAL' };
+  }
+
+  async listar(filaId: string, k: number, solicitud: SolicitudPagina): Promise<PaginaTurnos> {
+    const fila = this.filas.get(filaId);
+    const elementos: TurnoEntregado[] = [];
+    if (!fila) return { elementos, ...metadatosPagina(solicitud, 0) };
+
+    const { desplazamiento, tamano } = resolverPagina(solicitud);
+    const total = fila.pref.length + fila.gen.length;
+    const metadatos = metadatosPagina(solicitud, total);
+    if (desplazamiento >= total) return { elementos, ...metadatos };
+
+    let pref = 0;
+    let gen = 0;
+    let racha = fila.racha;
+    const fin = Math.min(total, desplazamiento + tamano);
+    for (let posicion = 0; posicion < fin; posicion++) {
+      const usarPref = salePreferencial(fila.pref.length - pref, fila.gen.length - gen, racha, k);
+      const turno = usarPref ? fila.pref[pref++] : fila.gen[gen++];
+      racha = usarPref ? racha + 1 : 0;
+      if (posicion >= desplazamiento) {
+        elementos.push({ ...turno, tipoAtencion: usarPref ? 'PREFERENCIAL' : 'GENERAL' });
+      }
+    }
+    return { elementos, ...metadatos };
   }
 
   async personasDelante(filaId: string, turnoId: string, k: number): Promise<number | null> {

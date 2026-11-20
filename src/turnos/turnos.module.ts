@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ATENDER_TURNO, CONFIRMAR_PRESENCIA } from './application/ports/in/atender-turno.use-case';
 import { CANCELAR_TURNO } from './application/ports/in/cancelar-turno.use-case';
 import { CONSULTAR_CATALOGO } from './application/ports/in/consultar-catalogo.use-case';
+import { CONSULTAR_FILA } from './application/ports/in/consultar-fila.use-case';
 import { REVISAR_VENCIMIENTOS } from './application/ports/in/revisar-vencimientos.use-case';
 import { CONSULTAR_MI_TURNO } from './application/ports/in/consultar-mi-turno.use-case';
 import { LLAMAR_SIGUIENTE } from './application/ports/in/llamar-siguiente.use-case';
@@ -31,6 +32,7 @@ import { TURNO_REPOSITORY, TurnoRepository } from './application/ports/out/turno
 import { AtenderTurnoService, ConfirmarPresenciaService } from './application/use-cases/atender-turno.service';
 import { CancelarTurnoService } from './application/use-cases/cancelar-turno.service';
 import { ConsultarCatalogoService } from './application/use-cases/consultar-catalogo.service';
+import { ConsultarFilaService } from './application/use-cases/consultar-fila.service';
 import { RevisarVencimientosService } from './application/use-cases/revisar-vencimientos.service';
 import { ConsultarMiTurnoService } from './application/use-cases/consultar-mi-turno.service';
 import { LlamarSiguienteService } from './application/use-cases/llamar-siguiente.service';
@@ -92,6 +94,11 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
       provide: CONSULTAR_CATALOGO,
       useFactory: (catalogo: CatalogoPort) => new ConsultarCatalogoService(catalogo),
       inject: [CATALOGO],
+    },
+    {
+      provide: CONSULTAR_FILA,
+      useFactory: (catalogo: CatalogoPort, motor: MotorFilasPort) => new ConsultarFilaService(catalogo, motor),
+      inject: [CATALOGO, MOTOR_FILAS],
     },
     {
       provide: SOLICITAR_TURNO,
