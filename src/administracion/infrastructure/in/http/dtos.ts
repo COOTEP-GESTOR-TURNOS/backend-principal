@@ -1,22 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
   IsEmail,
   IsIn,
-  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Length,
   Matches,
-  Max,
   MaxLength,
-  Min,
 } from 'class-validator';
 import type { Rol } from '../../../../compartido/domain/principal';
+import { PaginacionDto, PaginacionQuery } from '../../../../compartido/infrastructure/http/paginacion.dto';
 import { TIPOS_DOCUMENTO, type TipoDocumento } from '../../../../identidad/domain/usuario';
+import type { FichaUsuario } from '../../../application/ports/in/administrar-usuarios.use-case';
 
 const ROLES: Rol[] = ['SUPERADMIN', 'ADMIN_AGENCIA', 'FUNCIONARIO', 'ASOCIADO'];
 const DOCUMENTO = /^[A-Za-z0-9]{4,20}$/;
@@ -92,7 +91,7 @@ export class ActualizarUsuarioDto {
   activo?: boolean;
 }
 
-export class ListarUsuariosQuery {
+export class ListarUsuariosQuery extends PaginacionQuery {
   @ApiPropertyOptional({ description: 'Nombre, correo o documento' })
   @IsOptional()
   @IsString()
@@ -114,19 +113,9 @@ export class ListarUsuariosQuery {
   @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value))
   @IsBoolean()
   activo?: boolean;
+}
 
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  pagina = 1;
-
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  tamano = 20;
+export class PaginaUsuariosDto extends PaginacionDto {
+  @ApiProperty({ type: 'array', items: { type: 'object' }, description: 'Fichas de usuarios visibles para el administrador' })
+  elementos!: FichaUsuario[];
 }

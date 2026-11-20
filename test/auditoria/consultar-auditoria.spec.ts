@@ -1,3 +1,4 @@
+import { errors, types, type Client as ClienteCassandra } from 'cassandra-driver';
 import type {
   AuditoriaLecturaPort,
   DirectorioUsuariosPort,
@@ -6,6 +7,8 @@ import type {
   RegistroAuditoria,
 } from '../../src/auditoria/application/ports/out/auditoria-lectura.port';
 import { ConsultarAuditoriaService } from '../../src/auditoria/application/use-cases/consultar-auditoria.service';
+import { AuditoriaLecturaCassandraAdapter } from '../../src/auditoria/infrastructure/out/auditoria-lectura-cassandra.adapter';
+import { DatosInvalidosError, ServicioNoDisponibleError } from '../../src/compartido/application/errores-aplicacion';
 import { NoEncontradoError, PermisoDenegadoError, ReglaNegocioError } from '../../src/compartido/domain/errores';
 import type { Principal } from '../../src/compartido/domain/principal';
 import { Fila } from '../../src/turnos/domain/fila';
@@ -63,12 +66,14 @@ describe('RF-20, CU-06: consulta de la auditoría', () => {
     expect(r.entradas[0].actor).toMatchObject({ nombre: 'Ana Superadmin', email: 'ana@cootep.test' });
     expect(r.entradas[1].actor.nombre).toBeNull(); // intento con un correo que no existe
     expect(r.siguiente).toBe('ab12');
+    expect(r.limite).toBe(50);
     expect(lectura.pedidos[0]).toMatchObject({ clave: 'GLOBAL:2026-11-16', opciones: { limite: 50 } });
   });
 
   it('pasa el filtro de acción, la página siguiente y limita el tamaño a 200', async () => {
     const { servicio, lectura } = armar();
-    await servicio.porAmbitoDia(superadmin, { ambito: MOCOA, dia: '2026-11-15', accion: 'INTENTO_FUERA_DE_AMBITO', limite: 500, siguiente: 'ab12' });
+    const r = await servicio.porAmbitoDia(superadmin, { ambito: MOCOA, dia: '2026-11-15', accion: 'INTENTO_FUERA_DE_AMBITO', limite: 500, siguiente: 'ab12' });
+    expect(r.limite).toBe(200);
     expect(lectura.pedidos[0]).toMatchObject({
       clave: `${MOCOA}:2026-11-15`,
       opciones: { limite: 200, siguiente: 'ab12', accion: 'INTENTO_FUERA_DE_AMBITO' },
@@ -90,9 +95,38 @@ describe('RF-20, CU-06: consulta de la auditoría', () => {
 
   it('por persona usa el mes actual y valida el formato', async () => {
     const { servicio, lectura } = armar();
-    const r = await servicio.porActorMes(superadmin, { actorId: ANA });
+    const r = await servicio.porActorMes(superadmin, { actorId: ANA, limite: 1 });
     expect(r.mes).toBe('2026-11');
+    expect(r).toMatchObject({ limite: 1, siguiente: null });
     expect(lectura.pedidos[0].clave).toBe(`${ANA}:2026-11`);
     await expect(servicio.porActorMes(superadmin, { actorId: ANA, mes: '2026-13' })).rejects.toBeInstanceOf(ReglaNegocioError);
+  });
+});
+
+describe('Paginación nativa de auditoría en Cassandra', () => {
+  it('usa el cursor devuelto por Cassandra y termina cuando ya no hay cursor', async () => {
+    const execute = jest.fn()
+      .mockResolvedValueOnce({ rows: [], pageState: 'ab12' })
+      .mockResolvedValueOnce({ rows: [], pageState: null });
+    const lectura = new AuditoriaLecturaCassandraAdapter({ execute } as unknown as ClienteCassandra);
+
+    const primera = await lectura.porAmbitoDia('GLOBAL', '2026-11-16', { limite: 1 });
+    expect(primera.siguiente).toBe('ab12');
+    expect(execute.mock.calls[0][2]).toEqual({ prepare: true, fetchSize: 1 });
+
+    const ultima = await lectura.porAmbitoDia('GLOBAL', '2026-11-16', { limite: 1, siguiente: primera.siguiente! });
+    expect(ultima.siguiente).toBeNull();
+    expect(execute.mock.calls[1][2]).toEqual({ prepare: true, fetchSize: 1, pageState: 'ab12' });
+  });
+
+  it('traduce un cursor inválido sin tratar otros errores como fallas de entrada', async () => {
+    const execute = jest.fn()
+      .mockRejectedValueOnce(new errors.ResponseError(types.responseErrorCodes.protocolError, 'Invalid value for the paging state'))
+      .mockRejectedValueOnce(new errors.OperationTimedOutError('Se agotó el tiempo de lectura'));
+    const lectura = new AuditoriaLecturaCassandraAdapter({ execute } as unknown as ClienteCassandra);
+    const opciones = { limite: 1, siguiente: 'ab12' };
+
+    await expect(lectura.porActorMes(ANA, '2026-11', opciones)).rejects.toBeInstanceOf(DatosInvalidosError);
+    await expect(lectura.porActorMes(ANA, '2026-11', opciones)).rejects.toBeInstanceOf(ServicioNoDisponibleError);
   });
 });

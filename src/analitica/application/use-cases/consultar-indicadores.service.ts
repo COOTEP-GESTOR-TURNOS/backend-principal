@@ -1,12 +1,14 @@
 import type { AuditLogPort } from '../../../auditoria/application/ports/out/audit-log.port';
 import type { CachePort } from '../../../compartido/application/ports/cache.port';
 import { NoEncontradoError, PermisoDenegadoError, ReglaNegocioError } from '../../../compartido/domain/errores';
+import { metadatosPagina, resolverPagina } from '../../../compartido/domain/paginacion';
 import type { Principal } from '../../../compartido/domain/principal';
 import { fechaLocal } from '../../../compartido/domain/tiempo';
 import { PoliticaAdministracion as Politica } from '../../../identidad/domain/politica-administracion';
 import { rolPrincipal } from '../../../identidad/domain/usuario';
 import type { CatalogoPort, RelojPort } from '../../../turnos/application/ports/out/otros.ports';
 import type {
+  ConsultaIndicadores,
   ConsultarIndicadoresUseCase,
   IndicadoresAgencia,
   TableroIndicadores,
@@ -67,10 +69,11 @@ export class ConsultarIndicadoresService implements ConsultarIndicadoresUseCase 
     private readonly auditoria: AuditLogPort,
   ) {}
 
-  async ejecutar(actor: Principal, cmd: { agenciaId?: string; desde?: string; hasta?: string; ip?: string }): Promise<TableroIndicadores> {
+  async ejecutar(actor: Principal, cmd: ConsultaIndicadores): Promise<TableroIndicadores> {
     const { desde, hasta } = this.rango(cmd.desde, cmd.hasta);
-    const ids = await this.ambito(actor, cmd.agenciaId, cmd.ip);
+    const idsAutorizados = await this.ambito(actor, cmd.agenciaId, cmd.ip);
     const catalogo = await this.catalogo.listarAgencias();
+    const ids = idsAutorizados ?? catalogo.map((a) => a.id);
     const nombres = new Map(catalogo.map((a) => [a.id, a.nombre]));
     const desconocida = ids.find((id) => !nombres.has(id));
     if (desconocida) throw new NoEncontradoError('AGENCIA_NO_ENCONTRADA', 'La agencia no existe');
@@ -82,12 +85,23 @@ export class ConsultarIndicadoresService implements ConsultarIndicadoresUseCase 
       return { agenciaId: id, nombre: nombres.get(id)!, disponible: r.status === 'fulfilled', ...valores };
     });
 
-    return {
+    const tablero: TableroIndicadores = {
       desde,
       hasta,
       ambito: Politica.esSuperadmin(actor) && !cmd.agenciaId ? 'GLOBAL' : 'AGENCIA',
       agencias,
       total: totalizar(agencias.filter((a) => a.disponible)),
+    };
+
+    if (cmd.pagina === undefined && cmd.tamano === undefined) return tablero;
+
+    const { desplazamiento, tamano } = resolverPagina(cmd);
+    const orden = new Map(catalogo.map((agencia, i) => [agencia.id, i]));
+    const ordenadas = [...agencias].sort((a, b) => orden.get(a.agenciaId)! - orden.get(b.agenciaId)!);
+    return {
+      ...tablero,
+      agencias: ordenadas.slice(desplazamiento, desplazamiento + tamano),
+      paginacion: metadatosPagina(cmd, agencias.length),
     };
   }
 
@@ -102,10 +116,10 @@ export class ConsultarIndicadoresService implements ConsultarIndicadoresUseCase 
     return { desde, hasta };
   }
 
-  /** Agencias que el actor puede ver. Pedir una fuera de su ámbito es 403 y queda auditado. */
-  private async ambito(actor: Principal, agenciaId: string | undefined, ip?: string): Promise<string[]> {
+  /** Agencias autorizadas. Sin filtro, el ámbito global abarca todo el catálogo. */
+  private async ambito(actor: Principal, agenciaId: string | undefined, ip?: string): Promise<string[] | undefined> {
     if (Politica.esSuperadmin(actor)) {
-      return agenciaId ? [agenciaId] : (await this.catalogo.listarAgencias()).map((a) => a.id);
+      return agenciaId ? [agenciaId] : undefined;
     }
     const propias = Politica.agenciasAdministradas(actor);
     if (propias.length === 0) throw new PermisoDenegadoError('FUERA_DE_AMBITO', 'Tu rol no tiene indicadores que consultar');

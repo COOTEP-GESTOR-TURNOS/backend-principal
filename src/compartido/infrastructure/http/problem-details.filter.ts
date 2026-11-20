@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import {
+  DatosInvalidosError,
   DemasiadosIntentosError,
   NoAutenticadoError,
   ServicioNoDisponibleError,
@@ -75,6 +76,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         detalle: Array.isArray(mensaje) ? mensaje.join('; ') : mensaje,
       };
     }
+    if (error instanceof DatosInvalidosError) return { status: 400, codigo: error.codigo, detalle: error.message };
     if (error instanceof ConflictoError) return { status: 409, codigo: error.codigo, detalle: error.message };
     if (error instanceof ReglaNegocioError) return { status: 422, codigo: error.codigo, detalle: error.message };
     if (error instanceof NoEncontradoError) return { status: 404, codigo: error.codigo, detalle: error.message };

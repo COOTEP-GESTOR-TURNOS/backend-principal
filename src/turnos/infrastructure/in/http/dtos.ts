@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsIn, IsOptional, IsUUID } from 'class-validator';
+import { PaginacionDto } from '../../../../compartido/infrastructure/http/paginacion.dto';
 import { EstadoTurno } from '../../../domain/estado-turno';
 
 export class SolicitarTurnoDto {
@@ -41,4 +42,14 @@ export class ResumenTurnoDto {
 export class MiTurnoDto extends ResumenTurnoDto {
   @ApiProperty({ nullable: true, description: 'Minutos; null si la analítica no respondió' })
   esperaEstimadaMin: number | null;
+}
+
+export class TurnoEnFilaDto {
+  @ApiProperty({ format: 'uuid' }) turnoId!: string;
+  @ApiProperty({ example: 1 }) numero!: number;
+  @ApiProperty({ enum: ['GENERAL', 'PREFERENCIAL'] }) tipoAtencion!: 'GENERAL' | 'PREFERENCIAL';
+}
+
+export class PaginaTurnosDto extends PaginacionDto {
+  @ApiProperty({ type: [TurnoEnFilaDto] }) elementos!: TurnoEnFilaDto[];
 }

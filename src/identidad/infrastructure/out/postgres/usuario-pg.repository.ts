@@ -30,6 +30,8 @@ interface FilaUsuario {
   roles: { id: string; rol: Rol; agenciaId: string | null; servicioId: string | null; asignadoEn: string }[];
 }
 
+type FilaPaginaUsuarios = (FilaUsuario | { id: null }) & { total: string };
+
 /** Usuario con sus roles en una sola consulta (json_agg). */
 const SELECT_USUARIO = `
   SELECT u.id, u.email, u.nombre, u.tipo_documento, u.numero_documento, u.fecha_nacimiento,
@@ -193,16 +195,24 @@ export class UsuarioPgRepository implements UsuarioRepository {
   }
 
   async listar(f: FiltroUsuarios): Promise<PaginaUsuarios> {
-    const { rows } = await this.pool.query<{ id: string; total: string }>(
-      `SELECT u.id, count(*) OVER () AS total
-         FROM usuario u
-        WHERE ($1::text IS NULL OR u.nombre ILIKE $1 OR u.email ILIKE $1 OR u.numero_documento ILIKE $1)
-          AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM asignacion_rol r WHERE r.usuario_id = u.id AND r.rol = $2))
-          AND ($3::uuid[] IS NULL OR EXISTS (
-                SELECT 1 FROM asignacion_rol r WHERE r.usuario_id = u.id AND r.agencia_id = ANY($3)))
-          AND ($4::boolean IS NULL OR u.activo = $4)
-        ORDER BY u.nombre, u.id
-        LIMIT $5 OFFSET $6`,
+    const { rows } = await this.pool.query<FilaPaginaUsuarios>(
+      `WITH filtrados AS (
+         SELECT u.id, u.nombre
+           FROM usuario u
+          WHERE ($1::text IS NULL OR u.nombre ILIKE $1 OR u.email ILIKE $1 OR u.numero_documento ILIKE $1)
+            AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM asignacion_rol r WHERE r.usuario_id = u.id AND r.rol = $2))
+            AND ($3::uuid[] IS NULL OR EXISTS (
+                  SELECT 1 FROM asignacion_rol r WHERE r.usuario_id = u.id AND r.agencia_id = ANY($3)))
+            AND ($4::boolean IS NULL OR u.activo = $4)
+       ), fichas AS (
+         ${SELECT_USUARIO}
+           JOIN (SELECT id FROM filtrados ORDER BY nombre, id LIMIT $5 OFFSET $6) pagina ON pagina.id = u.id
+          GROUP BY u.id
+       )
+       SELECT fichas.*, conteo.total
+         FROM (SELECT count(*) AS total FROM filtrados) conteo
+         LEFT JOIN fichas ON true
+        ORDER BY fichas.nombre, fichas.id`,
       [
         f.texto ? patron(f.texto) : null,
         f.rol ?? null,
@@ -212,11 +222,7 @@ export class UsuarioPgRepository implements UsuarioRepository {
         (f.pagina - 1) * f.tamano,
       ],
     );
-    if (rows.length === 0) return { elementos: [], total: 0 };
-    const cuentas = await this.varios(`${SELECT_USUARIO} WHERE u.id = ANY($1) GROUP BY u.id ORDER BY u.nombre, u.id`, [
-      rows.map((r) => r.id),
-    ]);
-    return { elementos: cuentas, total: Number(rows[0].total) };
+    return { elementos: rows.filter((fila) => fila.id !== null).map(aCuenta), total: Number(rows[0].total) };
   }
 
   private async uno(sql: string, parametros: unknown[]): Promise<CuentaUsuario | null> {

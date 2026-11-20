@@ -1,3 +1,4 @@
+import type { Paginacion, SolicitudPagina } from '../../../../compartido/domain/paginacion';
 import type { Principal } from '../../../../compartido/domain/principal';
 
 export const CONSULTAR_INDICADORES = Symbol('CONSULTAR_INDICADORES');
@@ -27,9 +28,17 @@ export interface TableroIndicadores {
   agencias: IndicadoresAgencia[];
   /** Suma de los conteos y promedios ponderados de las agencias disponibles. */
   total: ValoresIndicadores;
+  paginacion?: Paginacion;
+}
+
+export interface ConsultaIndicadores extends SolicitudPagina {
+  agenciaId?: string;
+  desde?: string;
+  hasta?: string;
+  ip?: string;
 }
 
 /** Puerto de entrada (RF-19, CU-05): indicadores de turnos dentro del ámbito del administrador. */
 export interface ConsultarIndicadoresUseCase {
-  ejecutar(actor: Principal, cmd: { agenciaId?: string; desde?: string; hasta?: string; ip?: string }): Promise<TableroIndicadores>;
+  ejecutar(actor: Principal, cmd: ConsultaIndicadores): Promise<TableroIndicadores>;
 }

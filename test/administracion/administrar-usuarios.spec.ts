@@ -81,6 +81,23 @@ describe('Administración de usuarios (RF-18, CU-05, CU-06)', () => {
     expect((await e.administrar.listar(superadmin, { pagina: 1, tamano: 20 })).total).toBe(3);
   });
 
+  it('entrega metadatos de paginación y conserva el total en una página vacía', async () => {
+    const { e, superadmin } = await escenario();
+    const predeterminada = await e.administrar.listar(superadmin, {});
+    expect(predeterminada).toMatchObject({ total: 3, pagina: 1, tamano: 20, totalPaginas: 1 });
+
+    const primera = await e.administrar.listar(superadmin, { tamano: 1 });
+    const segunda = await e.administrar.listar(superadmin, { pagina: 2, tamano: 1 });
+    expect(primera.elementos).toHaveLength(1);
+    expect(segunda.elementos).toHaveLength(1);
+    expect(primera.elementos[0].id).not.toBe(segunda.elementos[0].id);
+
+    const fueraDeRango = await e.administrar.listar(superadmin, { pagina: 4, tamano: 1 });
+    expect(fueraDeRango).toEqual({ elementos: [], total: 3, pagina: 4, tamano: 1, totalPaginas: 3 });
+    const sinResultados = await e.administrar.listar(superadmin, { texto: 'nombre inexistente' });
+    expect(sinResultados).toMatchObject({ elementos: [], total: 0, totalPaginas: 0 });
+  });
+
   it('el superadministrador nombra un directivo de agencia; al desactivarlo se cierran sus sesiones', async () => {
     const { e, superadmin, funcionarioOrito } = await escenario();
     await e.administrar.asignarRol(superadmin, funcionarioOrito.id, { rol: 'ADMIN_AGENCIA', agenciaId: AGENCIA_ORITO });

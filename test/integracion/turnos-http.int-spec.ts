@@ -91,4 +91,69 @@ describe('Turnos por HTTP con PostgreSQL y Redis reales', () => {
       expect(await activosEnBd(dario.id)).toBe(1);
     });
   });
+
+  describe('Listados paginados', () => {
+    it('pagina usuarios filtrados y conserva el total al pedir una página vacía', async () => {
+      const superadmin = await e.crearPersona('Administrador de pruebas', [{ rol: 'SUPERADMIN' }]);
+      const prefijo = `Página de prueba ${randomUUID()}`;
+      await Promise.all(['C', 'A', 'B'].map((letra) => e.crearPersona(`${prefijo} ${letra}`)));
+      const filtro = `/admin/usuarios?texto=${encodeURIComponent(prefijo)}&tamano=2`;
+      const opciones = { token: superadmin.token };
+
+      const primera = await e.pedir('GET', `${filtro}&pagina=1`, opciones);
+      const segunda = await e.pedir('GET', `${filtro}&pagina=2`, opciones);
+      const vacia = await e.pedir('GET', `${filtro}&pagina=3`, opciones);
+
+      expect(primera).toMatchObject({
+        status: 200,
+        cuerpo: { pagina: 1, tamano: 2, total: 3, totalPaginas: 2, elementos: [{ nombre: `${prefijo} A` }, { nombre: `${prefijo} B` }] },
+      });
+      expect(segunda).toMatchObject({ status: 200, cuerpo: { pagina: 2, total: 3, elementos: [{ nombre: `${prefijo} C` }] } });
+      expect(vacia).toMatchObject({ status: 200, cuerpo: { pagina: 3, total: 3, totalPaginas: 2, elementos: [] } });
+    });
+
+    it('lee la fila por páginas y aplica el ámbito del funcionario sin llamar los turnos', async () => {
+      const creditos = 'b0000000-0000-4000-8000-000000000002';
+      const ana = await e.crearPersona('Ana Créditos');
+      const beto = await e.crearPersona('Beto Créditos');
+      const funcionario = await e.crearPersona('Funcionario Créditos', [{ rol: 'FUNCIONARIO', agenciaId: MOCOA, servicioId: creditos }]);
+      const fueraDeAmbito = await e.crearPersona('Funcionario Caja', [{ rol: 'FUNCIONARIO', agenciaId: MOCOA, servicioId: CAJA }]);
+      const cuerpo = { ...solicitud, servicioId: creditos };
+      const primero = await e.pedir<{ id: string }>('POST', '/turnos', { token: ana.token, cuerpo, cabeceras: nuevaClave() });
+      const segundo = await e.pedir<{ id: string }>('POST', '/turnos', { token: beto.token, cuerpo, cabeceras: nuevaClave() });
+      expect([primero.status, segundo.status]).toEqual([201, 201]);
+
+      const fila = `/filas/${MOCOA}/${creditos}/turnos`;
+      const opciones = { token: funcionario.token };
+      expect(await e.pedir('GET', `${fila}?pagina=1&tamano=1`, opciones)).toMatchObject({
+        status: 200,
+        cuerpo: { pagina: 1, tamano: 1, total: 2, totalPaginas: 2, elementos: [{ turnoId: primero.cuerpo.id }] },
+      });
+      expect(await e.pedir('GET', `${fila}?pagina=2&tamano=1`, opciones)).toMatchObject({
+        status: 200,
+        cuerpo: { pagina: 2, total: 2, elementos: [{ turnoId: segundo.cuerpo.id }] },
+      });
+      expect(await e.pedir('GET', fila, opciones)).toMatchObject({ status: 200, cuerpo: { pagina: 1, tamano: 20, total: 2 } });
+      expect((await e.pedir('GET', `${fila}?tamano=0`, opciones)).status).toBe(400);
+      expect((await e.pedir('GET', fila, { token: fueraDeAmbito.token })).status).toBe(403);
+      expect((await e.pedir('GET', fila)).status).toBe(401);
+    });
+
+    it('mantiene el tablero sin paginar para clientes existentes y limita el listado cuando se solicita', async () => {
+      const superadmin = await e.crearPersona('Administrador de indicadores', [{ rol: 'SUPERADMIN' }]);
+      const opciones = { token: superadmin.token };
+      const completa = await e.pedir<{ agencias: unknown[]; total: unknown }>('GET', '/indicadores', opciones);
+      const paginada = await e.pedir('GET', '/indicadores?pagina=2&tamano=3', opciones);
+
+      expect(completa.status).toBe(200);
+      expect(completa.cuerpo.agencias).toHaveLength(8);
+      expect(completa.cuerpo).not.toHaveProperty('paginacion');
+      expect(paginada).toMatchObject({
+        status: 200,
+        cuerpo: { total: completa.cuerpo.total, paginacion: { pagina: 2, tamano: 3, total: 8, totalPaginas: 3 } },
+      });
+      expect(paginada.cuerpo.agencias).toEqual(completa.cuerpo.agencias.slice(3, 6));
+      expect((await e.pedir('GET', '/indicadores?pagina=0', opciones)).status).toBe(400);
+    });
+  });
 });

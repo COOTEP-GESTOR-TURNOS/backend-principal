@@ -1,3 +1,4 @@
+import type { Paginacion, SolicitudPagina } from '../../../../compartido/domain/paginacion';
 import type { AsignacionRol, Principal, Rol } from '../../../../compartido/domain/principal';
 import type { AsignacionGuardada, TipoDocumento } from '../../../../identidad/domain/usuario';
 
@@ -21,13 +22,11 @@ export interface FichaUsuario {
   roles: AsignacionGuardada[];
 }
 
-export interface FiltroAdministracion {
+export interface FiltroAdministracion extends SolicitudPagina {
   texto?: string;
   rol?: Rol;
   agenciaId?: string;
   activo?: boolean;
-  pagina: number;
-  tamano: number;
 }
 
 export interface DatosNuevoUsuario {
@@ -49,7 +48,7 @@ export interface CambiosAdministrativos {
 
 /** Puerto de entrada: gestión de usuarios y roles dentro del ámbito de cada administrador (RF-18). */
 export interface AdministrarUsuariosUseCase {
-  listar(actor: Principal, filtro: FiltroAdministracion): Promise<{ elementos: FichaUsuario[]; total: number; pagina: number; tamano: number }>;
+  listar(actor: Principal, filtro: FiltroAdministracion): Promise<Paginacion & { elementos: FichaUsuario[] }>;
   obtener(actor: Principal, id: string): Promise<FichaUsuario>;
   crear(actor: Principal, datos: DatosNuevoUsuario, ip?: string): Promise<{ usuario: FichaUsuario; activacionEnviada: boolean }>;
   actualizar(actor: Principal, id: string, cambios: CambiosAdministrativos, ip?: string): Promise<FichaUsuario>;

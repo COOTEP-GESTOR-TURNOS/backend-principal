@@ -32,20 +32,22 @@ export class ConsultarAuditoriaService implements ConsultarAuditoriaUseCase {
       const agencias = await this.catalogo.listarAgencias();
       if (!agencias.some((a) => a.id === cmd.ambito)) throw new NoEncontradoError('AGENCIA_NO_ENCONTRADA', 'La agencia no existe');
     }
+    const limite = this.limite(cmd.limite);
     const pagina = await this.lectura.porAmbitoDia(cmd.ambito, dia, {
-      limite: this.limite(cmd.limite),
+      limite,
       siguiente: cmd.siguiente,
       accion: cmd.accion,
     });
-    return { ambito: cmd.ambito, dia, ...(await this.completar(pagina)) };
+    return { ambito: cmd.ambito, dia, ...(await this.completar(pagina, limite)) };
   }
 
   async porActorMes(actor: Principal, cmd: { actorId: string; mes?: string; limite?: number; siguiente?: string }) {
     this.exigirSuperadmin(actor);
     const mes = cmd.mes ?? fechaLocal(this.reloj.ahora()).slice(0, 7);
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) throw new ReglaNegocioError('MES_INVALIDO', 'El mes va como AAAA-MM');
-    const pagina = await this.lectura.porActorMes(cmd.actorId, mes, { limite: this.limite(cmd.limite), siguiente: cmd.siguiente });
-    return { actorId: cmd.actorId, mes, ...(await this.completar(pagina)) };
+    const limite = this.limite(cmd.limite);
+    const pagina = await this.lectura.porActorMes(cmd.actorId, mes, { limite, siguiente: cmd.siguiente });
+    return { actorId: cmd.actorId, mes, ...(await this.completar(pagina, limite)) };
   }
 
   private limite(pedido?: number): number {
@@ -53,7 +55,7 @@ export class ConsultarAuditoriaService implements ConsultarAuditoriaUseCase {
   }
 
   /** Agrega nombre y correo de cada actor con una sola consulta por página. */
-  private async completar(pagina: PaginaAuditoria): Promise<ResultadoAuditoria> {
+  private async completar(pagina: PaginaAuditoria, limite: number): Promise<ResultadoAuditoria> {
     const ids = [...new Set(pagina.registros.map((r) => r.actorId))];
     const nombres = ids.length ? await this.directorio.buscar(ids) : new Map<string, { nombre: string; email: string }>();
     const entradas: EntradaVista[] = pagina.registros.map((r) => ({
@@ -66,7 +68,7 @@ export class ConsultarAuditoriaService implements ConsultarAuditoriaUseCase {
       detalle: r.detalle,
       ip: r.ip,
     }));
-    return { entradas, siguiente: pagina.siguiente };
+    return { entradas, siguiente: pagina.siguiente, limite };
   }
 
   private exigirSuperadmin(actor: Principal): void {
