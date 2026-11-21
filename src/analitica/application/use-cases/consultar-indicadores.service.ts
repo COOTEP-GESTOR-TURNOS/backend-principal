@@ -1,6 +1,6 @@
 import type { AuditLogPort } from '../../../auditoria/application/ports/out/audit-log.port';
 import type { CachePort } from '../../../compartido/application/ports/cache.port';
-import { NoEncontradoError, PermisoDenegadoError, ReglaNegocioError } from '../../../compartido/domain/errores';
+import { NoEncontradoError, PermisoDenegadoError } from '../../../compartido/domain/errores';
 import { metadatosPagina, resolverPagina } from '../../../compartido/domain/paginacion';
 import type { Principal } from '../../../compartido/domain/principal';
 import { fechaLocal } from '../../../compartido/domain/tiempo';
@@ -15,11 +15,12 @@ import type {
   ValoresIndicadores,
 } from '../ports/in/consultar-indicadores.use-case';
 import type { AnaliticaPort, IndicadoresAnalitica } from '../ports/out/analitica.port';
+import type { FiltrosIndicadores } from '../ports/out/demanda.port';
+import { FiltrosAnaliticaService, validarRangoIndicadores } from './filtros-analitica.service';
 
 /** cache:indicadores:{agencia}:{desde}:{hasta}: los hechos llegan por ETL, 5 min de atraso no cambia el tablero. */
 export const TTL_INDICADORES_SEG = 5 * 60;
 export const DIAS_POR_DEFECTO = 30;
-export const DIAS_MAXIMOS = 366;
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 const CERO: ValoresIndicadores = {
@@ -43,7 +44,15 @@ export function totalizar(agencias: ValoresIndicadores[]): ValoresIndicadores {
   const turnos = agencias.reduce((s, a) => s + a.atendidos + a.cancelados + a.ausentes, 0);
   const ponderar = (campo: 'esperaPromedioMin' | 'atencionPromedioMin') =>
     atendidos ? agencias.reduce((s, a) => s + a[campo] * a.atendidos, 0) / atendidos : 0;
+  function sumarSiDisponible(campo: 'solicitados' | 'pendientes'): Partial<ValoresIndicadores> {
+    const valores = agencias.map((agencia) => agencia[campo]);
+    if (valores.every((valor) => valor === undefined)) return {};
+    if (!valores.every((valor) => typeof valor === 'number')) return { [campo]: null };
+    return { [campo]: valores.reduce((total, valor) => total + valor, 0) };
+  }
   return {
+    ...sumarSiDisponible('solicitados'),
+    ...sumarSiDisponible('pendientes'),
     atendidos,
     cancelados: agencias.reduce((s, a) => s + a.cancelados, 0),
     ausentes: agencias.reduce((s, a) => s + a.ausentes, 0),
@@ -67,6 +76,8 @@ export class ConsultarIndicadoresService implements ConsultarIndicadoresUseCase 
     private readonly cache: CachePort,
     private readonly reloj: RelojPort,
     private readonly auditoria: AuditLogPort,
+    private readonly filtros: FiltrosAnaliticaService,
+    private readonly demostracion = false,
   ) {}
 
   async ejecutar(actor: Principal, cmd: ConsultaIndicadores): Promise<TableroIndicadores> {
@@ -78,8 +89,11 @@ export class ConsultarIndicadoresService implements ConsultarIndicadoresUseCase 
     const desconocida = ids.find((id) => !nombres.has(id));
     if (desconocida) throw new NoEncontradoError('AGENCIA_NO_ENCONTRADA', 'La agencia no existe');
 
-    const resultados = await Promise.allSettled(ids.map((id) => this.leer(id, desde, hasta)));
-    const agencias: IndicadoresAgencia[] = ids.map((id, i) => {
+    const filtros = { servicioId: cmd.servicioId, colaboradorId: cmd.colaboradorId };
+    const ofertas = await this.filtros.validar(ids, { desde, hasta }, filtros);
+    const seleccionadas = ids.filter((id) => !cmd.servicioId || ofertas.has(id));
+    const resultados = await Promise.allSettled(seleccionadas.map((id) => this.leer(id, desde, hasta, filtros)));
+    const agencias: IndicadoresAgencia[] = seleccionadas.map((id, i) => {
       const r = resultados[i];
       const valores = r.status === 'fulfilled' ? (r.value ?? CERO) : CERO;
       return { agenciaId: id, nombre: nombres.get(id)!, disponible: r.status === 'fulfilled', ...valores };
@@ -109,10 +123,7 @@ export class ConsultarIndicadoresService implements ConsultarIndicadoresUseCase 
   private rango(desdePedido?: string, hastaPedido?: string): { desde: string; hasta: string } {
     const hasta = hastaPedido ?? fechaLocal(this.reloj.ahora());
     const desde = desdePedido ?? restarDias(hasta, DIAS_POR_DEFECTO - 1);
-    if (desde > hasta) throw new ReglaNegocioError('RANGO_INVALIDO', 'La fecha inicial no puede ser posterior a la final');
-    if ((Date.parse(hasta) - Date.parse(desde)) / DIA_MS >= DIAS_MAXIMOS) {
-      throw new ReglaNegocioError('RANGO_INVALIDO', `El rango no puede pasar de ${DIAS_MAXIMOS} días`);
-    }
+    validarRangoIndicadores({ desde, hasta });
     return { desde, hasta };
   }
 
@@ -138,11 +149,17 @@ export class ConsultarIndicadoresService implements ConsultarIndicadoresUseCase 
     return agenciaId ? [agenciaId] : propias;
   }
 
-  private async leer(agenciaId: string, desde: string, hasta: string): Promise<IndicadoresAnalitica | null> {
-    const clave = `indicadores:${agenciaId}:${desde}:${hasta}`;
+  private async leer(agenciaId: string, desde: string, hasta: string, filtros: FiltrosIndicadores): Promise<IndicadoresAnalitica | null> {
+    const filtrada = filtros.servicioId || filtros.colaboradorId;
+    const consultar = () => filtrada
+      ? this.analitica.indicadores(agenciaId, desde, hasta, filtros)
+      : this.analitica.indicadores(agenciaId, desde, hasta);
+    if (this.demostracion) return consultar();
+    const sufijo = filtrada ? `:${filtros.servicioId ?? ''}:${filtros.colaboradorId ?? ''}` : '';
+    const clave = `indicadores:${agenciaId}:${desde}:${hasta}${sufijo}`;
     const guardados = await this.cache.obtener<IndicadoresAnalitica>(clave);
     if (guardados) return guardados;
-    const nuevos = await this.analitica.indicadores(agenciaId, desde, hasta);
+    const nuevos = await consultar();
     if (nuevos) await this.cache.guardar(clave, nuevos, TTL_INDICADORES_SEG);
     return nuevos;
   }

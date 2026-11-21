@@ -1,9 +1,12 @@
 import type { Paginacion, SolicitudPagina } from '../../../../compartido/domain/paginacion';
 import type { Principal } from '../../../../compartido/domain/principal';
+import type { FiltrosIndicadores } from '../out/demanda.port';
 
 export const CONSULTAR_INDICADORES = Symbol('CONSULTAR_INDICADORES');
 
 export interface ValoresIndicadores {
+  solicitados?: number | null;
+  pendientes?: number | null;
   atendidos: number;
   cancelados: number;
   ausentes: number;
@@ -31,7 +34,7 @@ export interface TableroIndicadores {
   paginacion?: Paginacion;
 }
 
-export interface ConsultaIndicadores extends SolicitudPagina {
+export interface ConsultaIndicadores extends SolicitudPagina, FiltrosIndicadores {
   agenciaId?: string;
   desde?: string;
   hasta?: string;

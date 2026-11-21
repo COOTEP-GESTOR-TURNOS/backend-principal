@@ -12,7 +12,9 @@ import type { AsignacionRol } from '../../src/compartido/domain/principal';
 import { configurarApp } from '../../src/configurar-app';
 import { AuditoriaEnMemoria } from '../../src/identidad/infrastructure/out/memoria/adaptadores-en-memoria';
 import { MOTOR_FILAS } from '../../src/turnos/application/ports/out/motor-filas.port';
-import { EVENT_STORE, NOTIFICADOR, RELOJ } from '../../src/turnos/application/ports/out/otros.ports';
+import { SOLICITAR_TURNO, type SolicitarTurnoUseCase } from '../../src/turnos/application/ports/in/solicitar-turno.use-case';
+import { EVENT_STORE, JORNADAS, NOTIFICADOR, RELOJ, type JornadasPort, type RelojPort } from '../../src/turnos/application/ports/out/otros.ports';
+import { TURNO_REPOSITORY, type TurnoRepository } from '../../src/turnos/application/ports/out/turno.repository';
 import {
   EventStoreEnMemoria,
   MotorFilasEnMemoria,
@@ -55,6 +57,11 @@ export interface Persona {
 export interface Entorno {
   url: string;
   pool: Pool;
+  reloj: RelojPort;
+  eventos: EventStoreEnMemoria;
+  jornadas: JornadasPort;
+  turnos: TurnoRepository;
+  solicitar: SolicitarTurnoUseCase;
   pedir<T = Record<string, unknown>>(metodo: string, ruta: string, opciones?: { token?: string; cuerpo?: unknown; cabeceras?: Record<string, string> }): Promise<Respuesta<T>>;
   crearPersona(nombre: string, roles?: AsignacionRol[]): Promise<Persona>;
   cerrar(): Promise<void>;
@@ -86,17 +93,19 @@ export async function levantarEntorno(): Promise<Entorno> {
     CIERRE_INTERVALO_SEG: '0',
   });
 
+  const reloj = new RelojFijo(AHORA);
+  const eventos = new EventStoreEnMemoria();
   const modulo = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(MOTOR_FILAS)
     .useValue(new MotorFilasEnMemoria())
     .overrideProvider(EVENT_STORE)
-    .useValue(new EventStoreEnMemoria())
+    .useValue(eventos)
     .overrideProvider(NOTIFICADOR)
     .useValue(new NotificadorEnMemoria())
     .overrideProvider(AUDIT_LOG)
     .useValue(new AuditoriaEnMemoria())
     .overrideProvider(RELOJ)
-    .useValue(new RelojFijo(AHORA))
+    .useValue(reloj)
     .compile();
   const app = configurarApp(modulo.createNestApplication<NestExpressApplication>({ logger: ['error'] }));
   await app.listen(0, '127.0.0.1');
@@ -106,6 +115,11 @@ export async function levantarEntorno(): Promise<Entorno> {
   return {
     url,
     pool,
+    reloj,
+    eventos,
+    jornadas: modulo.get(JORNADAS),
+    turnos: modulo.get(TURNO_REPOSITORY),
+    solicitar: modulo.get(SOLICITAR_TURNO),
     async pedir(metodo, ruta, { token, cuerpo, cabeceras } = {}) {
       const r = await fetch(url + ruta, {
         method: metodo,
