@@ -13,6 +13,7 @@ export function leerConfig() {
     cassandraDatacenter: env.CASSANDRA_DATACENTER ?? 'datacenter1',
     motorFilasUrl: env.MOTOR_FILAS_URL ?? 'http://localhost:8081',
     analiticaUrl: env.ANALITICA_URL ?? 'http://localhost:8000',
+    demandaDemo: /^(true|1|on|yes)$/i.test(env.DEMANDA_DEMO ?? ''),
     serviceToken: env.SERVICE_TOKEN ?? '',
     jwtSecreto: env.JWT_SECRETO ?? '',
     corsOrigenes: (env.CORS_ORIGENES ?? 'http://localhost:5173').split(','),

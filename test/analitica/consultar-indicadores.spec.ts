@@ -1,7 +1,10 @@
 import { ConsultarIndicadoresService, totalizar } from '../../src/analitica/application/use-cases/consultar-indicadores.service';
+import { FiltrosAnaliticaService } from '../../src/analitica/application/use-cases/filtros-analitica.service';
 import { AnaliticaEnMemoria, CacheEnMemoria } from '../../src/analitica/infrastructure/out/memoria/adaptadores-en-memoria';
 import { NoEncontradoError, PermisoDenegadoError, ReglaNegocioError } from '../../src/compartido/domain/errores';
 import type { Principal } from '../../src/compartido/domain/principal';
+import type { CatalogoFiltrosPort } from '../../src/analitica/application/ports/out/catalogo-filtros.port';
+import type { DemandaPort } from '../../src/analitica/application/ports/out/demanda.port';
 import { AuditoriaEnMemoria } from '../../src/identidad/infrastructure/out/memoria/adaptadores-en-memoria';
 import { Fila } from '../../src/turnos/domain/fila';
 import { CatalogoEnMemoria, RelojFijo } from '../../src/turnos/infrastructure/out/memoria/adaptadores-en-memoria';
@@ -24,12 +27,21 @@ function armar() {
     [ORITO]: { atendidos: 100, cancelados: 0, ausentes: 0, esperaPromedioMin: 2, atencionPromedioMin: 4, proporcionPreferencial: 0.1 },
   };
   const auditoria = new AuditoriaEnMemoria();
+  const catalogoFiltros: jest.Mocked<CatalogoFiltrosPort> = {
+    ofertas: jest.fn().mockResolvedValue([{ agenciaId: MOCOA, servicioId: CAJA, nombre: 'Caja', activa: true }]),
+    colaboradoresVigentes: jest.fn().mockResolvedValue([]), nombresColaboradores: jest.fn(), nombresServicios: jest.fn(),
+  };
+  const demanda: jest.Mocked<DemandaPort> = {
+    opcionesHistoricas: jest.fn().mockResolvedValue([]), calendario: jest.fn(), tablero: jest.fn(), crearEvento: jest.fn(),
+    editarEvento: jest.fn(), eliminarEvento: jest.fn(),
+  };
   const servicio = new ConsultarIndicadoresService(
     new CatalogoEnMemoria([fila(MOCOA), fila(ORITO)]),
     analitica,
     new CacheEnMemoria(),
     new RelojFijo(new Date('2026-11-16T15:00:00Z')),
     auditoria,
+    new FiltrosAnaliticaService(catalogoFiltros, demanda),
   );
   return { servicio, analitica, auditoria };
 }
@@ -107,6 +119,17 @@ describe('RF-19: indicadores con el ámbito del administrador', () => {
     await servicio.ejecutar(superadmin, {});
     await servicio.ejecutar(superadmin, {});
     expect(analitica.consultasIndicadores).toHaveLength(2);
+  });
+
+  it('separa la caché de cada servicio y conserva solo las agencias que lo ofrecen', async () => {
+    const { servicio, analitica } = armar();
+    const consultas = jest.spyOn(analitica, 'indicadores');
+    await servicio.ejecutar(superadmin, {});
+    const filtrado = await servicio.ejecutar(superadmin, { servicioId: CAJA });
+    await servicio.ejecutar(superadmin, { servicioId: CAJA });
+    expect(filtrado.agencias.map(({ agenciaId }) => agenciaId)).toEqual([MOCOA]);
+    expect(consultas).toHaveBeenCalledTimes(3);
+    expect(consultas).toHaveBeenLastCalledWith(MOCOA, '2026-10-18', '2026-11-16', { servicioId: CAJA });
   });
 
   it('valida el rango y la agencia', async () => {

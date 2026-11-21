@@ -1,4 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
+import type { Db } from 'mongodb';
+import { asignarCorreoDemo, generarCuentas } from '../../src/cli/demo-cuentas';
+import { dejarPendientes, importarHistorial } from '../../src/cli/demo-turnos';
+import { EVENTOS_TURNO_DEMO, PARTICIPANTES_DEMO } from '../../src/compartido/infrastructure/demo-mongo';
+import { fechaLocal } from '../../src/compartido/domain/tiempo';
+import { CatalogoPgAdapter } from '../../src/turnos/infrastructure/out/postgres/catalogo-pg.adapter';
 import { CAJA, type Entorno, levantarEntorno, MOCOA, nuevaClave, type Persona } from './entorno';
 
 /**
@@ -14,6 +21,84 @@ describe('Turnos por HTTP con PostgreSQL y Redis reales', () => {
 
   afterAll(async () => {
     await e?.cerrar();
+  });
+
+  it('siembra identidades, historial y pendientes demo y permite atender un pendiente desde la fila', async () => {
+    const documentos = new Map<string, Map<string, object>>();
+    const db = { collection: (nombre: string) => ({
+      findOne: async (filtro: { turnoId: string; estadoNuevo: string }) => e.eventos.eventos.find((evento) =>
+        evento.turnoId === filtro.turnoId && evento.estadoNuevo === filtro.estadoNuevo),
+      bulkWrite: async (operaciones: { updateOne: { filter: { _id?: string; eventoId?: string }; update: { $setOnInsert: object } } }[]) => {
+        const coleccion = documentos.get(nombre) ?? new Map<string, object>();
+        documentos.set(nombre, coleccion);
+        let upsertedCount = 0;
+        for (const { updateOne: { filter, update } } of operaciones) {
+          const clave = filter._id ?? filter.eventoId!;
+          if (coleccion.has(clave)) continue;
+          coleccion.set(clave, update.$setOnInsert);
+          upsertedCount++;
+        }
+        return { upsertedCount };
+      },
+    }) } as unknown as Db;
+    const catalogoPg = new CatalogoPgAdapter(e.pool, {
+      obtener: async () => null, guardar: async () => undefined, invalidar: async () => undefined,
+    });
+    const catalogo = {
+      listarAgencias: async () => (await catalogoPg.listarAgencias()).filter(({ id }) => id === MOCOA),
+      obtenerFila: catalogoPg.obtenerFila.bind(catalogoPg),
+    };
+    const primera = await generarCuentas(e.pool, db, catalogo, 7);
+    const [agencia] = primera.agencias;
+    expect(agencia.administradores).toHaveLength(1);
+    expect(agencia.funcionarios.length).toBeGreaterThanOrEqual(3);
+    expect(agencia.funcionarios.length).toBeLessThanOrEqual(5);
+    expect(agencia.funcionarios[0].servicioId).toBeNull();
+    expect(agencia.asociados.length).toBeGreaterThanOrEqual(1000);
+    expect(agencia.asociados.length).toBeLessThanOrEqual(3000);
+    expect(documentos.get(PARTICIPANTES_DEMO)?.size).toBe(agencia.asociados.length);
+    const [asociado] = agencia.asociados;
+    const [administrador] = agencia.administradores;
+    await asignarCorreoDemo(e.pool, administrador, 'demo-activado@pruebas.test');
+    expect(await generarCuentas(e.pool, db, catalogo, 42)).toEqual(primera);
+    expect((await e.pool.query('SELECT email, email_verificado FROM usuario WHERE id = $1', [administrador])).rows[0])
+      .toEqual({ email: 'demo-activado@pruebas.test', email_verificado: false });
+
+    const turno = {
+      id: randomUUID(), agenciaId: MOCOA, servicioId: CAJA, asociadoId: asociado, fecha: '2026-01-26', numero: 1,
+      tipoAtencion: 'GENERAL', estado: 'CANCELADO', canal: 'WEB', motivo: 'CANCELADO_POR_ASOCIADO',
+      solicitadoEn: '2026-01-26T13:00:00.000Z', finEn: '2026-01-26T13:05:00.000Z',
+    };
+    const base = { turnoId: turno.id, agenciaId: MOCOA, servicioId: CAJA, asociadoId: asociado, canal: 'WEB', tipoAtencion: 'GENERAL', datos: {} };
+    const eventos = [
+      { ...base, eventoId: `${turno.id}:solicitud`, tipo: 'TurnoSolicitado', estadoNuevo: 'SOLICITADO', ocurridoEn: turno.solicitadoEn },
+      { ...base, eventoId: `${turno.id}:cancelado`, tipo: 'TurnoCancelado', estadoNuevo: 'CANCELADO', ocurridoEn: turno.finEn },
+    ];
+    const entrada = () => Readable.from([JSON.stringify({ turno, eventos })]);
+    expect(await importarHistorial(e.pool, db, entrada())).toEqual({ turnos: 1, eventos: 2, procesados: 1 });
+    expect(await importarHistorial(e.pool, db, entrada())).toEqual({ turnos: 0, eventos: 0, procesados: 1 });
+    expect(documentos.get(EVENTOS_TURNO_DEMO)?.size).toBe(2);
+    expect((await e.pool.query('SELECT estado FROM turno WHERE id = $1', [turno.id])).rows[0].estado).toBe('CANCELADO');
+
+    const entradaPendientes = { fecha: fechaLocal(e.reloj.ahora()), agencias: [
+      { agenciaId: MOCOA, servicioId: CAJA, asociados: agencia.asociados.slice(0, 8) },
+    ] };
+    const sembrarPendientes = () => dejarPendientes(
+      e.pool, db, catalogo, e.jornadas, e.turnos, e.solicitar, entradaPendientes, 'integracion', e.reloj,
+    );
+    const pendientes = await sembrarPendientes();
+    expect(pendientes.pendientes).toBe(3);
+    const idsPendientes = pendientes.turnos.map(({ id }) => id);
+    expect((await sembrarPendientes()).turnos.map(({ id }) => id)).toEqual(idsPendientes);
+    const funcionario = await e.crearPersona('Funcionario que atiende demo', [{ rol: 'FUNCIONARIO', agenciaId: MOCOA, servicioId: CAJA }]);
+    const opciones = { token: funcionario.token };
+    const llamado = await e.pedir<{ id: string }>('POST', `/filas/${MOCOA}/${CAJA}/siguiente`, opciones);
+    expect(llamado).toMatchObject({ status: 200, cuerpo: { estado: 'LLAMADO' } });
+    expect(idsPendientes).toContain(llamado.cuerpo.id);
+    expect(await e.pedir('POST', `/turnos/${llamado.cuerpo.id}/iniciar`, opciones)).toMatchObject({ status: 200 });
+    expect(await e.pedir('POST', `/turnos/${llamado.cuerpo.id}/finalizar`, opciones))
+      .toMatchObject({ status: 200, cuerpo: { estado: 'ATENDIDO' } });
+    expect((await sembrarPendientes()).pendientes).toBe(2);
   });
 
   const solicitud = { agenciaId: MOCOA, servicioId: CAJA, canal: 'WEB' };

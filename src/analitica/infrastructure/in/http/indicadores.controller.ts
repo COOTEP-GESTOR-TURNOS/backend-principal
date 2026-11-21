@@ -20,6 +20,16 @@ export class IndicadoresQuery extends PaginacionQuery {
   @IsUUID()
   agenciaId?: string;
 
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  servicioId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  colaboradorId?: string;
+
   @ApiPropertyOptional({ example: '2026-10-18', description: 'Por defecto, 30 días antes de hasta' })
   @IsOptional()
   @IsDateString({ strict: true })
@@ -31,7 +41,9 @@ export class IndicadoresQuery extends PaginacionQuery {
   hasta?: string;
 }
 
-class ValoresIndicadoresDto implements ValoresIndicadores {
+export class ValoresIndicadoresDto implements ValoresIndicadores {
+  @ApiPropertyOptional({ type: 'integer', nullable: true }) solicitados?: number | null;
+  @ApiPropertyOptional({ type: 'integer', nullable: true }) pendientes?: number | null;
   @ApiProperty() atendidos!: number;
   @ApiProperty() cancelados!: number;
   @ApiProperty() ausentes!: number;
@@ -40,7 +52,7 @@ class ValoresIndicadoresDto implements ValoresIndicadores {
   @ApiProperty() proporcionPreferencial!: number;
 }
 
-class IndicadoresAgenciaDto extends ValoresIndicadoresDto implements IndicadoresAgencia {
+export class IndicadoresAgenciaDto extends ValoresIndicadoresDto implements IndicadoresAgencia {
   @ApiProperty({ format: 'uuid' }) agenciaId!: string;
   @ApiProperty() nombre!: string;
   @ApiProperty() disponible!: boolean;
@@ -71,7 +83,9 @@ export class IndicadoresController {
   @ApiOkResponse({ type: TableroIndicadoresDto })
   indicadores(@PrincipalActual() actor: Principal, @Query() q: IndicadoresQuery, @Req() req: Request) {
     return this.consultar.ejecutar(actor, {
-      agenciaId: q.agenciaId,
+      agenciaId: q.agenciaId?.toLowerCase(),
+      servicioId: q.servicioId?.toLowerCase(),
+      colaboradorId: q.colaboradorId?.toLowerCase(),
       desde: q.desde?.slice(0, 10),
       hasta: q.hasta?.slice(0, 10),
       pagina: q.pagina,

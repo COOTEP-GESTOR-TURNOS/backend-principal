@@ -12,6 +12,8 @@ interface Opciones {
   cuerpo?: unknown;
   /** Solo las operaciones idempotentes se reintentan (encolar, retirar, consultas). */
   reintentable: boolean;
+  tiempoLimiteMs?: number;
+  estadosSinDatos?: readonly number[];
 }
 
 /**
@@ -23,7 +25,7 @@ export async function llamarServicio<T>(
   token: string,
   metodo: string,
   ruta: string,
-  { cuerpo, reintentable }: Opciones,
+  { cuerpo, reintentable, tiempoLimiteMs = TIEMPO_LIMITE_SERVICIOS_MS, estadosSinDatos = [] }: Opciones,
 ): Promise<Respuesta<T>> {
   const intentos = reintentable ? 3 : 1;
   let ultimoError: unknown;
@@ -38,7 +40,7 @@ export async function llamarServicio<T>(
           'X-Request-Id': requestIdActual() ?? randomUUID(),
         },
         body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
-        signal: AbortSignal.timeout(TIEMPO_LIMITE_SERVICIOS_MS),
+        signal: AbortSignal.timeout(tiempoLimiteMs),
       });
     } catch (error) {
       ultimoError = error; // red caída o tiempo límite: se puede reintentar
@@ -48,7 +50,7 @@ export async function llamarServicio<T>(
       ultimoError = new Error(`respondió ${respuesta.status}`);
       continue;
     }
-    if (respuesta.status === 204 || respuesta.status === 404) {
+    if (respuesta.status === 204 || respuesta.status === 404 || estadosSinDatos.includes(respuesta.status)) {
       return { status: respuesta.status, datos: null };
     }
     if (respuesta.status >= 400) {
