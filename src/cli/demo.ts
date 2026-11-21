@@ -4,14 +4,15 @@ import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { Db } from 'mongodb';
 import type { Pool } from 'pg';
-import { prepararEventosDemo } from '../compartido/infrastructure/demo-mongo';
 import { InfraestructuraModule } from '../compartido/infrastructure/infraestructura.module';
 import { MONGO_DB, PG_POOL } from '../compartido/infrastructure/recursos';
 import { SOLICITAR_TURNO, type SolicitarTurnoUseCase } from '../turnos/application/ports/in/solicitar-turno.use-case';
+import { MOTOR_FILAS, type MotorFilasPort } from '../turnos/application/ports/out/motor-filas.port';
 import { CATALOGO, JORNADAS, type CatalogoPort, type JornadasPort } from '../turnos/application/ports/out/otros.ports';
 import { TURNO_REPOSITORY, type TurnoRepository } from '../turnos/application/ports/out/turno.repository';
 import { TurnosModule } from '../turnos/turnos.module';
-import { asignarCorreoDemo, generarCuentas } from './demo-cuentas';
+import { asignarCorreoDemo, generarCuentas, sinBom } from './demo-cuentas';
+import { limpiarDemo } from './demo-limpieza';
 import { dejarPendientes, importarHistorial, type EntradaPendientes } from './demo-turnos';
 
 @Module({ imports: [InfraestructuraModule, TurnosModule] })
@@ -21,13 +22,15 @@ const AYUDA = `Uso interno del comando demo.ps1:
   demo.js cuentas --semilla 7
   demo.js importar                       # leer el historial JSONL de stdin
   demo.js pendientes --lote inicial      # leer las agencias elegibles de stdin
-  demo.js activar-usuario --id UUID-o-correo-demo --correo persona@ejemplo.com`;
+  demo.js activar-usuario --id UUID-o-correo-demo --correo persona@ejemplo.com
+  demo.js limpiar                        # borra cuentas, turnos y filas de la demostración
+Solo fuera de producción: en Docker, docker compose exec -e NODE_ENV=development ...`;
 
 async function leerPendientes(): Promise<EntradaPendientes> {
   process.stdin.setEncoding('utf8');
   let entrada = '';
   for await (const fragmento of process.stdin) entrada += fragmento;
-  return JSON.parse(entrada) as EntradaPendientes;
+  return JSON.parse(sinBom(entrada)) as EntradaPendientes;
 }
 
 async function main() {
@@ -44,7 +47,7 @@ async function main() {
     return;
   }
   const [accion] = positionals;
-  if (positionals.length !== 1 || !['cuentas', 'importar', 'pendientes', 'activar-usuario'].includes(accion)) {
+  if (positionals.length !== 1 || !['cuentas', 'importar', 'pendientes', 'activar-usuario', 'limpiar'].includes(accion)) {
     throw new Error(AYUDA);
   }
   const semilla = Number(values.semilla);
@@ -54,6 +57,8 @@ async function main() {
   if (accion === 'activar-usuario' && (!values.id || !values.correo)) throw new Error('Indica --id y --correo.');
 
   try { process.loadEnvFile(); } catch { /* El contenedor ya proporciona el entorno. */ }
+  // Igual que token:dev y codigo-totp: los datos ficticios nunca se generan en producción.
+  if (process.env.NODE_ENV === 'production') throw new Error('No disponible en producción (use -e NODE_ENV=development).');
   // El servidor HTTP sigue siendo el único dueño de las tareas periódicas del turnero.
   process.env.VENCIMIENTOS_INTERVALO_SEG = '0';
   process.env.CIERRE_INTERVALO_SEG = '0';
@@ -65,9 +70,12 @@ async function main() {
       return;
     }
     const db = app.get<Db>(MONGO_DB);
-    await prepararEventosDemo(db);
+    if (accion === 'limpiar') {
+      console.log(JSON.stringify(await limpiarDemo(pool, db, app.get<MotorFilasPort>(MOTOR_FILAS))));
+      return;
+    }
     if (accion === 'cuentas') {
-      console.log(JSON.stringify(await generarCuentas(pool, db, app.get<CatalogoPort>(CATALOGO), semilla)));
+      console.log(JSON.stringify(await generarCuentas(pool, app.get<CatalogoPort>(CATALOGO), semilla)));
       return;
     }
     if (accion === 'importar') {

@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import type { Db } from 'mongodb';
-import { asignarCorreoDemo, generarCuentas } from '../../src/cli/demo-cuentas';
+import { asignarCorreoDemo, EVENTOS_TURNO, generarCuentas, ORIGEN_SIMULADO } from '../../src/cli/demo-cuentas';
+import { limpiarDemo } from '../../src/cli/demo-limpieza';
 import { dejarPendientes, importarHistorial } from '../../src/cli/demo-turnos';
-import { EVENTOS_TURNO_DEMO, PARTICIPANTES_DEMO } from '../../src/compartido/infrastructure/demo-mongo';
 import { fechaLocal } from '../../src/compartido/domain/tiempo';
 import { CatalogoPgAdapter } from '../../src/turnos/infrastructure/out/postgres/catalogo-pg.adapter';
 import { CAJA, type Entorno, levantarEntorno, MOCOA, nuevaClave, type Persona } from './entorno';
@@ -23,8 +23,9 @@ describe('Turnos por HTTP con PostgreSQL y Redis reales', () => {
     await e?.cerrar();
   });
 
-  it('siembra identidades, historial y pendientes demo y permite atender un pendiente desde la fila', async () => {
-    const documentos = new Map<string, Map<string, object>>();
+  it('siembra identidades, historial y pendientes demo, permite atender un pendiente y limpia todo', async () => {
+    const documentos = new Map<string, Map<string, { asociadoId?: string; origen?: string }>>();
+    const borrados: unknown[] = [];
     const db = { collection: (nombre: string) => ({
       findOne: async (filtro: { turnoId: string; estadoNuevo: string }) => e.eventos.eventos.find((evento) =>
         evento.turnoId === filtro.turnoId && evento.estadoNuevo === filtro.estadoNuevo),
@@ -40,6 +41,10 @@ describe('Turnos por HTTP con PostgreSQL y Redis reales', () => {
         }
         return { upsertedCount };
       },
+      deleteMany: async (filtro: unknown) => {
+        borrados.push(filtro);
+        return { deletedCount: 1 };
+      },
     }) } as unknown as Db;
     const catalogoPg = new CatalogoPgAdapter(e.pool, {
       obtener: async () => null, guardar: async () => undefined, invalidar: async () => undefined,
@@ -48,7 +53,7 @@ describe('Turnos por HTTP con PostgreSQL y Redis reales', () => {
       listarAgencias: async () => (await catalogoPg.listarAgencias()).filter(({ id }) => id === MOCOA),
       obtenerFila: catalogoPg.obtenerFila.bind(catalogoPg),
     };
-    const primera = await generarCuentas(e.pool, db, catalogo, 7);
+    const primera = await generarCuentas(e.pool, catalogo, 7);
     const [agencia] = primera.agencias;
     expect(agencia.administradores).toHaveLength(1);
     expect(agencia.funcionarios.length).toBeGreaterThanOrEqual(3);
@@ -56,11 +61,10 @@ describe('Turnos por HTTP con PostgreSQL y Redis reales', () => {
     expect(agencia.funcionarios[0].servicioId).toBeNull();
     expect(agencia.asociados.length).toBeGreaterThanOrEqual(1000);
     expect(agencia.asociados.length).toBeLessThanOrEqual(3000);
-    expect(documentos.get(PARTICIPANTES_DEMO)?.size).toBe(agencia.asociados.length);
     const [asociado] = agencia.asociados;
     const [administrador] = agencia.administradores;
     await asignarCorreoDemo(e.pool, administrador, 'demo-activado@pruebas.test');
-    expect(await generarCuentas(e.pool, db, catalogo, 42)).toEqual(primera);
+    expect(await generarCuentas(e.pool, catalogo, 42)).toEqual(primera);
     expect((await e.pool.query('SELECT email, email_verificado FROM usuario WHERE id = $1', [administrador])).rows[0])
       .toEqual({ email: 'demo-activado@pruebas.test', email_verificado: false });
 
@@ -77,7 +81,8 @@ describe('Turnos por HTTP con PostgreSQL y Redis reales', () => {
     const entrada = () => Readable.from([JSON.stringify({ turno, eventos })]);
     expect(await importarHistorial(e.pool, db, entrada())).toEqual({ turnos: 1, eventos: 2, procesados: 1 });
     expect(await importarHistorial(e.pool, db, entrada())).toEqual({ turnos: 0, eventos: 0, procesados: 1 });
-    expect(documentos.get(EVENTOS_TURNO_DEMO)?.size).toBe(2);
+    // El historial simulado va a la colección normal, marcado para reconocerlo y borrarlo.
+    expect([...documentos.get(EVENTOS_TURNO)!.values()].map(({ origen }) => origen)).toEqual([ORIGEN_SIMULADO, ORIGEN_SIMULADO]);
     expect((await e.pool.query('SELECT estado FROM turno WHERE id = $1', [turno.id])).rows[0].estado).toBe('CANCELADO');
 
     const entradaPendientes = { fecha: fechaLocal(e.reloj.ahora()), agencias: [
@@ -99,6 +104,21 @@ describe('Turnos por HTTP con PostgreSQL y Redis reales', () => {
     expect(await e.pedir('POST', `/turnos/${llamado.cuerpo.id}/finalizar`, opciones))
       .toMatchObject({ status: 200, cuerpo: { estado: 'ATENDIDO' } });
     expect((await sembrarPendientes()).pendientes).toBe(2);
+
+    // Limpieza: fuera de la fila del motor, sin cuentas ni turnos de la demostración.
+    const participantes = Number((await e.pool.query('SELECT count(*) AS n FROM demo_participante')).rows[0].n);
+    const limpieza = await limpiarDemo(e.pool, db, e.motor);
+    expect(limpieza).toMatchObject({ cuentas: participantes, retiradosDeFilas: 2 });
+    expect(await e.motor.siguiente(`${MOCOA}:${CAJA}`, 2)).toBeNull();
+    expect(borrados).toEqual([{ asociadoId: { $in: expect.arrayContaining([asociado, administrador]) } }]);
+    const quedan = await e.pool.query(
+      `SELECT (SELECT count(*) FROM demo_participante) AS participantes, (SELECT count(*) FROM turno WHERE id = ANY($1::uuid[])) AS turnos,
+              (SELECT count(*) FROM usuario WHERE id = $2) AS cuentas, (SELECT count(*) FROM demo_escenario) AS escenarios`,
+      [[turno.id, ...idsPendientes], administrador],
+    );
+    expect(quedan.rows[0]).toEqual({ participantes: '0', turnos: '0', cuentas: '0', escenarios: '0' });
+    // El funcionario real que atendió un turno demo conserva su cuenta.
+    expect((await e.pool.query('SELECT count(*) AS n FROM usuario WHERE id = $1', [funcionario.id])).rows[0].n).toBe('1');
   });
 
   const solicitud = { agenciaId: MOCOA, servicioId: CAJA, canal: 'WEB' };

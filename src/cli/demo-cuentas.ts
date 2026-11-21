@@ -1,14 +1,21 @@
 import { createHash } from 'node:crypto';
 import { isEmail, isUUID } from 'class-validator';
-import type { Db } from 'mongodb';
 import type { Pool, PoolClient } from 'pg';
 import { ubicacionAgenciaPutumayo } from '../analitica/application/ubicacion-agencia';
-import { PARTICIPANTES_DEMO, type ParticipanteDemoMongo } from '../compartido/infrastructure/demo-mongo';
 import { normalizarCorreo } from '../identidad/domain/usuario';
 import type { AgenciaCatalogo, CatalogoPort, ServicioCatalogo } from '../turnos/application/ports/out/otros.ports';
 
 const BLOQUEO_GENERADOR = 1_512_608_615;
 const DOMINIO_DEMO = '@cootep-turno.test';
+
+/** Los turnos simulados van a la colección normal con esta marca; la analítica la reconoce y la borra al limpiar. */
+export const EVENTOS_TURNO = 'eventos_turno';
+export const ORIGEN_SIMULADO = 'SIMULADO';
+
+/** Windows PowerShell 5.1 antepone una marca BOM (U+FEFF) al pasar archivos por tubería. */
+export function sinBom(texto: string): string {
+  return texto.charCodeAt(0) === 0xfeff ? texto.slice(1) : texto;
+}
 
 type RolDemo = 'ADMIN_AGENCIA' | 'FUNCIONARIO' | 'ASOCIADO';
 
@@ -141,7 +148,7 @@ async function guardarParticipantes(cliente: PoolClient, participantes: Particip
   return participantes.map((p) => p.rol === 'FUNCIONARIO' ? { ...p, servicio_id: servicios.get(p.id) ?? null } : p);
 }
 
-export async function generarCuentas(pool: Pool, db: Db, catalogo: CatalogoPort, semillaSolicitada: number): Promise<ManifiestoCuentas> {
+export async function generarCuentas(pool: Pool, catalogo: CatalogoPort, semillaSolicitada: number): Promise<ManifiestoCuentas> {
   const agencias = await catalogo.listarAgencias();
   if (agencias.length === 0) throw new Error('El catálogo local no tiene agencias.');
   const configuracion = await Promise.all(agencias.map(async (agencia) => ({
@@ -175,12 +182,6 @@ export async function generarCuentas(pool: Pool, db: Db, catalogo: CatalogoPort,
     }
     return { semilla: escenario.semilla, agencias: agenciasDemo };
   });
-  const coleccion = db.collection<ParticipanteDemoMongo>(PARTICIPANTES_DEMO);
-  for (const agencia of manifiesto.agencias) {
-    await coleccion.bulkWrite(agencia.asociados.map((id) => ({
-      updateOne: { filter: { _id: id }, update: { $setOnInsert: { agenciaId: agencia.id } }, upsert: true },
-    })), { ordered: false });
-  }
   return manifiesto;
 }
 

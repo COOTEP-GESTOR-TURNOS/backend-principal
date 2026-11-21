@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { AUDIT_LOG, type AuditLogPort } from '../auditoria/application/ports/out/audit-log.port';
 import { AuditoriaModule } from '../auditoria/auditoria.module';
 import { CACHE, type CachePort } from '../compartido/application/ports/cache.port';
-import { leerConfig } from '../compartido/infrastructure/config';
 import { CATALOGO, type CatalogoPort, RELOJ, type RelojPort } from '../turnos/application/ports/out/otros.ports';
 import { TurnosModule } from '../turnos/turnos.module';
 import { CONSULTAR_INDICADORES } from './application/ports/in/consultar-indicadores.use-case';
@@ -52,7 +51,7 @@ import { CatalogoFiltrosPgAdapter } from './infrastructure/out/postgres/catalogo
       provide: CONSULTAR_INDICADORES,
       useFactory: (catalogo: CatalogoPort, analitica: AnaliticaPort, cache: CachePort, reloj: RelojPort, auditoria: AuditLogPort,
         filtros: FiltrosAnaliticaService) =>
-        new ConsultarIndicadoresService(catalogo, analitica, cache, reloj, auditoria, filtros, leerConfig().demandaDemo),
+        new ConsultarIndicadoresService(catalogo, analitica, cache, reloj, auditoria, filtros),
       inject: [CATALOGO, ANALITICA, CACHE, RELOJ, AUDIT_LOG, FiltrosAnaliticaService],
     },
   ],

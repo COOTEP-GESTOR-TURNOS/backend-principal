@@ -77,7 +77,6 @@ export class ConsultarIndicadoresService implements ConsultarIndicadoresUseCase 
     private readonly reloj: RelojPort,
     private readonly auditoria: AuditLogPort,
     private readonly filtros: FiltrosAnaliticaService,
-    private readonly demostracion = false,
   ) {}
 
   async ejecutar(actor: Principal, cmd: ConsultaIndicadores): Promise<TableroIndicadores> {
@@ -154,7 +153,6 @@ export class ConsultarIndicadoresService implements ConsultarIndicadoresUseCase 
     const consultar = () => filtrada
       ? this.analitica.indicadores(agenciaId, desde, hasta, filtros)
       : this.analitica.indicadores(agenciaId, desde, hasta);
-    if (this.demostracion) return consultar();
     const sufijo = filtrada ? `:${filtros.servicioId ?? ''}:${filtros.colaboradorId ?? ''}` : '';
     const clave = `indicadores:${agenciaId}:${desde}:${hasta}${sufijo}`;
     const guardados = await this.cache.obtener<IndicadoresAnalitica>(clave);
