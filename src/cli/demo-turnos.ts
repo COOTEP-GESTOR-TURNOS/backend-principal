@@ -5,7 +5,6 @@ import type { Db } from 'mongodb';
 import type { Pool } from 'pg';
 import { ErrorDeDominio } from '../compartido/domain/errores';
 import { fechaLocal } from '../compartido/domain/tiempo';
-import { EVENTOS_TURNO_DEMO } from '../compartido/infrastructure/demo-mongo';
 import type { SolicitarTurnoUseCase } from '../turnos/application/ports/in/solicitar-turno.use-case';
 import type { CatalogoPort, JornadasPort, RelojPort } from '../turnos/application/ports/out/otros.ports';
 import type { TurnoRepository } from '../turnos/application/ports/out/turno.repository';
@@ -13,7 +12,7 @@ import type { ResumenTurno } from '../turnos/application/resumen-turno';
 import { EstadoTurno, ESTADOS_ACTIVOS, nombreEvento } from '../turnos/domain/estado-turno';
 import type { EventoTurnoPublicable } from '../turnos/domain/evento-turno';
 import type { DatosTurno } from '../turnos/domain/turno';
-import { claveDemo, enTransaccion } from './demo-cuentas';
+import { claveDemo, enTransaccion, EVENTOS_TURNO, ORIGEN_SIMULADO, sinBom } from './demo-cuentas';
 
 type FechaTurno = 'solicitadoEn' | 'proximoEn' | 'confirmadoEn' | 'llamadoEn' | 'inicioAtencionEn' | 'finEn';
 type TurnoEntrada = Omit<DatosTurno, FechaTurno | 'version'> & Record<FechaTurno, string | null>;
@@ -41,7 +40,7 @@ const TERMINALES = new Set([EstadoTurno.ATENDIDO, EstadoTurno.AUSENTE, EstadoTur
 const TAMANO_LOTE = 500;
 
 function leerRegistro(linea: string, hoy: string): RegistroDemo {
-  const registro = JSON.parse(linea) as RegistroDemo;
+  const registro = JSON.parse(sinBom(linea)) as RegistroDemo;
   const turno = registro.turno;
   const eventos = registro.eventos;
   if (!turno || ![turno.id, turno.agenciaId, turno.servicioId, turno.asociadoId].every((id) => isUUID(id)) ||
@@ -104,14 +103,13 @@ async function guardarLote(pool: Pool, db: Db, lote: RegistroDemo[]): Promise<{ 
     }
     return { nuevos: creados.rowCount ?? 0, codigos: new Map(rows.map(({ id, codigo }) => [id, codigo])) };
   });
-  const publicadoEn = new Date();
   const eventos = lote.flatMap(({ turno, eventos }) => eventos.map((evento) => ({
     ...evento,
     datos: { ...evento.datos, codigo: codigos.codigos.get(turno.id) },
     ocurridoEn: new Date(evento.ocurridoEn),
-    publicadoEn,
+    origen: ORIGEN_SIMULADO,
   })));
-  const resultado = await db.collection(EVENTOS_TURNO_DEMO).bulkWrite(eventos.map((evento) => ({
+  const resultado = await db.collection(EVENTOS_TURNO).bulkWrite(eventos.map((evento) => ({
     updateOne: { filter: { eventoId: evento.eventoId }, update: { $setOnInsert: evento }, upsert: true },
   })), { ordered: false });
   return { turnos: codigos.nuevos, eventos: resultado.upsertedCount };
@@ -175,13 +173,13 @@ async function reservar(pool: Pool, grupo: GrupoPendientes, fecha: string, lote:
 }
 
 async function asegurarEventosIniciales(db: Db, turno: DatosTurno): Promise<void> {
-  const coleccion = db.collection(EVENTOS_TURNO_DEMO);
+  const coleccion = db.collection(EVENTOS_TURNO);
   if (await coleccion.findOne({ turnoId: turno.id, estadoNuevo: EstadoTurno.SOLICITADO })) return;
   // El flujo normal pudo guardar la solicitud en PostgreSQL justo antes de perder la conexión con MongoDB.
   const inicial = {
     turnoId: turno.id, agenciaId: turno.agenciaId, servicioId: turno.servicioId, asociadoId: turno.asociadoId,
     tipoAtencion: turno.tipoAtencion, canal: turno.canal, datos: turno.codigo ? { codigo: turno.codigo } : {},
-    publicadoEn: new Date(),
+    origen: ORIGEN_SIMULADO,
   };
   const reparacion = [{ estado: EstadoTurno.SOLICITADO, ocurridoEn: turno.solicitadoEn, actorId: turno.asociadoId }];
   if (turno.numero !== null) reparacion.push({ estado: EstadoTurno.EN_ESPERA, ocurridoEn: turno.solicitadoEn, actorId: '' });

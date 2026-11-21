@@ -58,6 +58,7 @@ export interface Entorno {
   url: string;
   pool: Pool;
   reloj: RelojPort;
+  motor: MotorFilasEnMemoria;
   eventos: EventStoreEnMemoria;
   jornadas: JornadasPort;
   turnos: TurnoRepository;
@@ -94,10 +95,11 @@ export async function levantarEntorno(): Promise<Entorno> {
   });
 
   const reloj = new RelojFijo(AHORA);
+  const motor = new MotorFilasEnMemoria();
   const eventos = new EventStoreEnMemoria();
   const modulo = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(MOTOR_FILAS)
-    .useValue(new MotorFilasEnMemoria())
+    .useValue(motor)
     .overrideProvider(EVENT_STORE)
     .useValue(eventos)
     .overrideProvider(NOTIFICADOR)
@@ -116,6 +118,7 @@ export async function levantarEntorno(): Promise<Entorno> {
     url,
     pool,
     reloj,
+    motor,
     eventos,
     jornadas: modulo.get(JORNADAS),
     turnos: modulo.get(TURNO_REPOSITORY),
