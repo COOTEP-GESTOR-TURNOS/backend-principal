@@ -21,6 +21,11 @@ export function horaLocal(instante: Date, zona = ZONA_AGENCIAS): string {
   }).format(instante);
 }
 
+/** Instante de una fecha AAAA-MM-DD y hora HH:MM locales. Colombia no tiene horario de verano: siempre UTC−5. */
+export function instanteLocal(fecha: string, hora: string): Date {
+  return new Date(`${fecha}T${hora}:00-05:00`);
+}
+
 /** Franja de 30 minutos que contiene el instante, por ejemplo 09:30 (dimensión de la analítica). */
 export function franjaDe(instante: Date, zona = ZONA_AGENCIAS): string {
   const [hora, minuto] = horaLocal(instante, zona).split(':');

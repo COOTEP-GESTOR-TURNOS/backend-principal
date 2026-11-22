@@ -13,7 +13,7 @@ src/
 │   │                           estimarEsperaMin: TypeScript puro, sin NestJS ni bases de datos
 │   ├── application/
 │   │   ├── ports/in/           SolicitarTurno, CancelarTurno, ConsultarMiTurno, LlamarSiguiente,
-│   │   │                       AtenderTurno, ConfirmarPresencia
+│   │   │                       AtenderTurno, ConfirmarPresencia, ConsultarVentanilla
 │   │   ├── ports/out/          TurnoRepository, MotorFilasPort, EstimadorPort, EventStorePort,
 │   │   │                       NotificadorPort, CatalogoPort, PerfilAsociadoPort, Reloj, GeneradorIds
 │   │   └── use-cases/          una clase por caso de uso; sin decoradores de NestJS
@@ -65,12 +65,34 @@ docker compose -f infra/compose.apps.yml exec -e NODE_ENV=development backend-pr
   node dist/cli/codigo-totp.js --correo superadmin@cootep-turno.test
 ```
 
+## Ningún turno sobrevive a su jornada (RN-11, RN-13)
+
+Dos tareas periódicas terminan los turnos que quedarían activos, aunque el backend haya estado
+apagado a la hora de cierre. Al arrancar se ponen al día en el primer ciclo (30 y 60 s).
+
+| Turno | Cuándo termina solo | Resultado |
+| --- | --- | --- |
+| Solicitado, En espera o Próximo | Su jornada se cerró o es de un día anterior | `CANCELADO`, motivo `CIERRE_AGENCIA` |
+| Llamado | Pasó `T_LLAMADO_MIN`, sea del día que sea | `AUSENTE`, motivo `NO_SE_PRESENTO` |
+| En atención | 60 min después del cierre, o del inicio de la atención si empezó después | `ATENDIDO`, motivo `CIERRE_AUTOMATICO` |
+
+La atención que cierra el sistema publica `TurnoCerradoPorSistema`: la analítica la cuenta como
+atendida, pero no usa su duración.
+
+Cada funcionario tiene un turno en ventanilla a la vez. `GET /turnos/en-ventanilla` se lo devuelve
+al recargar (`204` si no tiene) y llamar otro sin terminarlo responde `409 TURNO_EN_VENTANILLA`.
+
 ## Concurrencia (sección 6 del informe)
 
 - `ConsultarMiTurnoService`: posición (motor de filas) y datos de espera (analítica) se piden a la
   vez con `Promise.allSettled`; cada llamada se cancela a los 2 s con `AbortSignal.timeout`.
 - Unicidad bajo concurrencia: índices únicos de PostgreSQL (`ux_turno_activo_asociado`,
   `ux_turno_idempotencia`) y bloqueo optimista por `version`.
+- La base manda y la fila la sigue: cancelar guarda y después retira; llamar salta lo que ya
+  terminó y, si la base falla, devuelve el turno a su puesto. Si una acción pierde la carrera, se
+  relee y se decide sobre el estado nuevo (`cambiar-turno.ts`; `test/turnos-simultaneos.spec.ts`).
+- `LlamarSiguienteService`: un cerrojo en Redis por funcionario evita que una doble pulsación llame
+  dos turnos.
 
 Medición de la sección 10 (la consulta con las dos llamadas en secuencia contra en paralelo, sobre
 el stack de Docker; resultados en `cootep-turno/docs/evidencias/mediciones`):

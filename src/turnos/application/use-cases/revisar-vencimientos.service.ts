@@ -23,10 +23,13 @@ export const CERROJO_VENCIMIENTOS = 'vencimientos';
 export const TTL_CERROJO_SEG = 25;
 
 /**
- * Tarea programada de vencimientos (RN-10, RN-11). En cada ciclo, por cada turno activo del día:
+ * Tarea programada de vencimientos (RN-10, RN-11, RN-13). En cada ciclo, por cada turno activo:
  * 1) Próximo sin confirmar después de T_CONFIRMACION → Ausente (SIN_CONFIRMAR).
  * 2) Llamado que no pasó a atención después de T_LLAMADO → Ausente (NO_SE_PRESENTO).
  * 3) En espera con N_PROXIMO personas o menos delante → Próximo, con su aviso.
+ * 4) En atención un margen después del cierre → Atendido (CIERRE_AUTOMATICO).
+ * Llamado y En atención se revisan de cualquier día. En espera y Próximo, solo de hoy: los de días
+ * anteriores los cancela el cierre, porque no son una ausencia del asociado.
  * Guarda primero en PostgreSQL con bloqueo optimista: si el asociado confirmó en ese instante,
  * gana su acción y el turno se deja para el siguiente ciclo. Solo después lo retira del motor.
  */
@@ -43,16 +46,20 @@ export class RevisarVencimientosService implements RevisarVencimientosUseCase {
   ) {}
 
   async ejecutar(): Promise<ResultadoRevision> {
-    const resultado: ResultadoRevision = { ejecutada: false, revisados: 0, proximos: 0, sinConfirmar: 0, noSePresento: 0, conflictos: 0, errores: 0 };
+    const resultado: ResultadoRevision = { ejecutada: false, revisados: 0, proximos: 0, sinConfirmar: 0, noSePresento: 0, atencionesCerradas: 0, conflictos: 0, errores: 0 };
     if (!(await this.cerrojo.tomar(CERROJO_VENCIMIENTOS, TTL_CERROJO_SEG))) return resultado;
     resultado.ejecutada = true;
     try {
       const ahora = this.reloj.ahora();
-      const activos = await this.turnos.buscarDelDiaPorEstado(fechaLocal(ahora), [
-        EstadoTurno.EN_ESPERA,
-        EstadoTurno.PROXIMO,
-        EstadoTurno.LLAMADO,
-      ]);
+      const hoy = fechaLocal(ahora);
+      const activos = (
+        await this.turnos.buscarHastaDiaPorEstado(hoy, [
+          EstadoTurno.EN_ESPERA,
+          EstadoTurno.PROXIMO,
+          EstadoTurno.LLAMADO,
+          EstadoTurno.EN_ATENCION,
+        ])
+      ).filter((t) => t.fecha === hoy || t.estado === EstadoTurno.LLAMADO || t.estado === EstadoTurno.EN_ATENCION);
       const filasTocadas = new Set<string>();
       const filas = new Map<string, Fila | null>();
       for (const turno of activos) {
@@ -79,8 +86,14 @@ export class RevisarVencimientosService implements RevisarVencimientosUseCase {
     }
   }
 
-  private async revisar(turno: Turno, fila: Fila, ahora: Date): Promise<'sinConfirmar' | 'noSePresento' | 'proximos' | null> {
+  private async revisar(turno: Turno, fila: Fila, ahora: Date): Promise<'sinConfirmar' | 'noSePresento' | 'atencionesCerradas' | 'proximos' | null> {
     const motivo = motivoDeVencimiento(turno.instantanea(), fila, ahora);
+    if (motivo === 'CIERRE_AUTOMATICO') {
+      turno.cerrarAtencionOlvidada(motivo, ahora);
+      await this.turnos.actualizar(turno); // si el funcionario finalizó en ese instante, gana su acción
+      await this.cerrar(turno, null);
+      return 'atencionesCerradas';
+    }
     if (motivo) {
       turno.marcarAusente(motivo, null, ahora);
       await this.turnos.actualizar(turno); // lanza ConflictoError si alguien lo cambió primero

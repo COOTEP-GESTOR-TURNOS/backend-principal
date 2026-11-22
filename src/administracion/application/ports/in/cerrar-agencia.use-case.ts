@@ -22,7 +22,10 @@ export interface ResultadoCierre {
 export interface CerrarAgenciaUseCase {
   /** actor null = cierre automático del sistema. */
   cerrarJornada(actor: Principal | null, agenciaId: string, ip?: string): Promise<ResultadoCierre>;
-  /** Cierra, una vez por día, las agencias que ya pasaron su hora de cierre. */
+  /**
+   * Cancela los pendientes rezagados de jornadas ya terminadas y cierra, una vez por día, las
+   * agencias que pasaron su hora de cierre.
+   */
   cierreAutomatico(): Promise<ResultadoCierre[]>;
   /** Deshace un cierre anticipado: la agencia vuelve a recibir turnos hoy si está en horario. */
   reabrirJornada(actor: Principal, agenciaId: string, ip?: string): Promise<{ agenciaId: string; fecha: string; reabierta: boolean }>;

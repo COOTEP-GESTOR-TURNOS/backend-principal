@@ -1,4 +1,4 @@
-import { horaLocal } from '../../compartido/domain/tiempo';
+import { horaLocal, instanteLocal } from '../../compartido/domain/tiempo';
 
 export interface ParametrosFila {
   /** N_PROXIMO: con estas personas o menos delante, el turno pasa a Próximo. */
@@ -16,6 +16,8 @@ export interface ParametrosFila {
 /** Valores de fábrica, los mismos de 02-datos-prueba.sql. */
 export const T_CONFIRMACION_MIN_POR_DEFECTO = 5;
 export const T_LLAMADO_MIN_POR_DEFECTO = 3;
+/** RN-13: lo que se espera, después del cierre, a que el funcionario finalice una atención. */
+export const MARGEN_CIERRE_ATENCION_MIN = 60;
 const MINUTO_MS = 60_000;
 
 export interface HorarioAtencion {
@@ -59,6 +61,15 @@ export class Fila {
   /** RN-11: hasta cuándo puede presentarse un turno llamado en `llamadoEn`. */
   limitePresentacion(llamadoEn: Date): Date {
     return new Date(llamadoEn.getTime() + (this.parametros.tLlamadoMin ?? T_LLAMADO_MIN_POR_DEFECTO) * MINUTO_MS);
+  }
+
+  /**
+   * RN-13: desde cuándo una atención se considera olvidada. El margen cuenta desde el cierre de la
+   * jornada del turno, o desde el inicio de la atención si empezó después del cierre.
+   */
+  limiteAtencion(fecha: string, inicioAtencionEn: Date): Date {
+    const base = Math.max(instanteLocal(fecha, this.horario.cierre).getTime(), inicioAtencionEn.getTime());
+    return new Date(base + MARGEN_CIERRE_ATENCION_MIN * MINUTO_MS);
   }
 
   /** RN-10: el turno queda Próximo con N_PROXIMO personas o menos delante. */

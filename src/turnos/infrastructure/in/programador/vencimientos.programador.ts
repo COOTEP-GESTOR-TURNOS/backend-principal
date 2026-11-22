@@ -33,10 +33,11 @@ export class VencimientosProgramador implements OnApplicationBootstrap, OnApplic
     this.enCurso = true;
     try {
       const r = await this.revisar.ejecutar();
-      if (r.proximos + r.sinConfirmar + r.noSePresento + r.conflictos + r.errores > 0) {
+      if (r.proximos + r.sinConfirmar + r.noSePresento + r.atencionesCerradas + r.conflictos + r.errores > 0) {
         this.logger.log(
           `Vencimientos: ${r.revisados} revisados, ${r.proximos} próximos, ${r.sinConfirmar} sin confirmar, ` +
-            `${r.noSePresento} no se presentaron, ${r.conflictos} en conflicto, ${r.errores} con error`,
+            `${r.noSePresento} no se presentaron, ${r.atencionesCerradas} atenciones cerradas, ` +
+            `${r.conflictos} en conflicto, ${r.errores} con error`,
         );
       }
     } catch (error) {

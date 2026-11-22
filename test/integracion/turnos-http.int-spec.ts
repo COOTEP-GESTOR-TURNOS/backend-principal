@@ -197,6 +197,48 @@ describe('Turnos por HTTP con PostgreSQL y Redis reales', () => {
     });
   });
 
+  describe('Turnos trabados (RN-13, CU-04)', () => {
+    it('recupera la ventanilla, no deja llamar otro y cierra la atención olvidada de otro día', async () => {
+      const ana = await e.crearPersona('Ana Ventanilla');
+      const funcionario = await e.crearPersona('Funcionario Ventanilla', [{ rol: 'FUNCIONARIO', agenciaId: MOCOA }]);
+      const opciones = { token: funcionario.token };
+      expect((await e.pedir('GET', '/turnos/en-ventanilla', opciones)).status).toBe(204);
+      expect((await e.pedir('GET', '/turnos/en-ventanilla', { token: ana.token })).status).toBe(403);
+
+      expect((await pedirTurno(ana)).status).toBe(201);
+      const llamado = await e.pedir<{ id: string }>('POST', `/filas/${MOCOA}/${CAJA}/siguiente`, opciones);
+      expect(llamado.status).toBe(200);
+      const { id } = llamado.cuerpo;
+      expect((await e.pedir('POST', `/turnos/${id}/iniciar`, opciones)).status).toBe(200);
+
+      // Lo que hace el panel al recargar.
+      expect(await e.pedir('GET', '/turnos/en-ventanilla', opciones)).toMatchObject({ status: 200, cuerpo: { id, estado: 'EN_ATENCION' } });
+      expect(await e.pedir('POST', `/filas/${MOCOA}/${CAJA}/siguiente`, opciones)).toMatchObject({
+        status: 409,
+        cuerpo: { codigo: 'TURNO_EN_VENTANILLA' },
+      });
+
+      await e.pool.query(
+        "UPDATE turno SET fecha = '2026-11-16', numero = numero + 900, inicio_atencion_en = '2026-11-16T15:00:00Z' WHERE id = $1",
+        [id],
+      );
+      expect(await e.vencimientos.ejecutar()).toMatchObject({ atencionesCerradas: 1 });
+      expect(await estadoEnBd(id)).toEqual({ estado: 'ATENDIDO', motivo: 'CIERRE_AUTOMATICO' });
+      expect((await e.pedir('GET', '/turnos/en-ventanilla', opciones)).status).toBe(204);
+    });
+
+    it('cancela en PostgreSQL un pendiente de otro día y el asociado puede pedir de nuevo', async () => {
+      const beto = await e.crearPersona('Beto Rezagado');
+      const turno = await pedirTurno(beto);
+      await e.pool.query("UPDATE turno SET fecha = '2026-11-17', numero = numero + 900 WHERE id = $1", [turno.cuerpo.id]);
+      expect((await pedirTurno(beto)).cuerpo).toMatchObject({ codigo: 'TURNO_ACTIVO' });
+
+      expect(await e.cierre.cierreAutomatico()).toMatchObject([{ fecha: '2026-11-17', cancelados: 1 }]);
+      expect(await estadoEnBd(turno.cuerpo.id)).toEqual({ estado: 'CANCELADO', motivo: 'CIERRE_AGENCIA' });
+      expect((await pedirTurno(beto)).status).toBe(201);
+    });
+  });
+
   describe('Listados paginados', () => {
     it('pagina usuarios filtrados y conserva el total al pedir una página vacía', async () => {
       const superadmin = await e.crearPersona('Administrador de pruebas', [{ rol: 'SUPERADMIN' }]);

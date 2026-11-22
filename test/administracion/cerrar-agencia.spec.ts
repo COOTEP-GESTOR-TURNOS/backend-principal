@@ -55,7 +55,7 @@ async function armar() {
   const jornadas = new JornadasEnMemoria();
   const agencias = new AgenciasEnMemoria([config(MOCOA, 'Agencia Mocoa'), config(ORITO, 'Agencia Orito')]);
   const solicitar = new SolicitarTurnoService(turnos, catalogo, new PerfilAsociadoEnMemoria(), motor, eventos, notificador, ids, reloj, jornadas);
-  const llamar = new LlamarSiguienteService(turnos, catalogo, motor, eventos, notificador, ids, reloj);
+  const llamar = new LlamarSiguienteService(turnos, catalogo, motor, eventos, notificador, ids, reloj, new CerrojoEnMemoria());
   const cerrar = new CerrarAgenciaService(agencias, turnos, motor, catalogo, eventos, notificador, ids, reloj, new CerrojoEnMemoria(), auditoria, jornadas);
 
   const pedir = (asociadoId: string, agenciaId: string, clave = `k-${asociadoId}`) =>

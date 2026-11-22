@@ -5,6 +5,7 @@ import { SolicitarTurnoService } from '../src/turnos/application/use-cases/solic
 import { Fila } from '../src/turnos/domain/fila';
 import {
   CatalogoEnMemoria,
+  CerrojoEnMemoria,
   EstimadorEnMemoria,
   EventStoreEnMemoria,
   GeneradorIdsSecuencial,
@@ -50,7 +51,7 @@ export function armarEscenario(instante = new Date('2026-11-20T14:00:00Z')) {
     reloj,
     solicitar: new SolicitarTurnoService(turnos, catalogo, perfiles, motor, eventos, notificador, ids, reloj),
     cancelar: new CancelarTurnoService(turnos, motor, eventos, notificador, ids, reloj),
-    llamar: new LlamarSiguienteService(turnos, catalogo, motor, eventos, notificador, ids, reloj),
+    llamar: new LlamarSiguienteService(turnos, catalogo, motor, eventos, notificador, ids, reloj, new CerrojoEnMemoria()),
     consultar: new ConsultarMiTurnoService(turnos, catalogo, motor, new EstimadorEnMemoria(), reloj),
   };
 }

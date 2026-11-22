@@ -5,6 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { Pool } from 'pg';
 import { GenericContainer, type StartedTestContainer, Wait } from 'testcontainers';
+import { CERRAR_AGENCIA, type CerrarAgenciaUseCase } from '../../src/administracion/application/ports/in/cerrar-agencia.use-case';
 import { AppModule } from '../../src/app.module';
 import { AUDIT_LOG } from '../../src/auditoria/application/ports/out/audit-log.port';
 import { firmarTokenDePrueba } from '../../src/cli/firmar-token';
@@ -12,6 +13,7 @@ import type { AsignacionRol } from '../../src/compartido/domain/principal';
 import { configurarApp } from '../../src/configurar-app';
 import { AuditoriaEnMemoria } from '../../src/identidad/infrastructure/out/memoria/adaptadores-en-memoria';
 import { MOTOR_FILAS } from '../../src/turnos/application/ports/out/motor-filas.port';
+import { REVISAR_VENCIMIENTOS, type RevisarVencimientosUseCase } from '../../src/turnos/application/ports/in/revisar-vencimientos.use-case';
 import { SOLICITAR_TURNO, type SolicitarTurnoUseCase } from '../../src/turnos/application/ports/in/solicitar-turno.use-case';
 import { EVENT_STORE, JORNADAS, NOTIFICADOR, RELOJ, type JornadasPort, type RelojPort } from '../../src/turnos/application/ports/out/otros.ports';
 import { TURNO_REPOSITORY, type TurnoRepository } from '../../src/turnos/application/ports/out/turno.repository';
@@ -63,6 +65,8 @@ export interface Entorno {
   jornadas: JornadasPort;
   turnos: TurnoRepository;
   solicitar: SolicitarTurnoUseCase;
+  cierre: CerrarAgenciaUseCase;
+  vencimientos: RevisarVencimientosUseCase;
   pedir<T = Record<string, unknown>>(metodo: string, ruta: string, opciones?: { token?: string; cuerpo?: unknown; cabeceras?: Record<string, string> }): Promise<Respuesta<T>>;
   crearPersona(nombre: string, roles?: AsignacionRol[]): Promise<Persona>;
   cerrar(): Promise<void>;
@@ -123,6 +127,8 @@ export async function levantarEntorno(): Promise<Entorno> {
     jornadas: modulo.get(JORNADAS),
     turnos: modulo.get(TURNO_REPOSITORY),
     solicitar: modulo.get(SOLICITAR_TURNO),
+    cierre: modulo.get(CERRAR_AGENCIA),
+    vencimientos: modulo.get(REVISAR_VENCIMIENTOS),
     async pedir(metodo, ruta, { token, cuerpo, cabeceras } = {}) {
       const r = await fetch(url + ruta, {
         method: metodo,

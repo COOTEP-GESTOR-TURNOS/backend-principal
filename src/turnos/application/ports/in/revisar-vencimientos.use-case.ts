@@ -8,6 +8,8 @@ export interface ResultadoRevision {
   proximos: number;
   sinConfirmar: number;
   noSePresento: number;
+  /** Atenciones olvidadas que el sistema cerró (CIERRE_AUTOMATICO). */
+  atencionesCerradas: number;
   /** El asociado o el funcionario cambiaron el turno al mismo tiempo; su acción gana. */
   conflictos: number;
   errores: number;
