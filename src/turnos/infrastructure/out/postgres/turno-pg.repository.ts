@@ -107,6 +107,27 @@ export class TurnoPgRepository implements TurnoRepository {
     );
     return rows.map(aDominio);
   }
+
+  async buscarHastaDiaPorEstado(fecha: string, estados: EstadoTurno[]): Promise<Turno[]> {
+    // Con estados activos, PostgreSQL usa el índice parcial ux_turno_activo_asociado: no lee el historial.
+    const { rows } = await this.pool.query<FilaTurno>(
+      `SELECT * FROM turno
+        WHERE fecha <= $1 AND estado = ANY($2::text[])
+        ORDER BY fecha, agencia_id, servicio_id, numero`,
+      [fecha, estados],
+    );
+    return rows.map(aDominio);
+  }
+
+  async buscarEnVentanilla(funcionarioId: string): Promise<Turno[]> {
+    const { rows } = await this.pool.query<FilaTurno>(
+      `SELECT * FROM turno
+        WHERE atendido_por = $1 AND estado = ANY($2::text[])
+        ORDER BY llamado_en`,
+      [funcionarioId, [EstadoTurno.LLAMADO, EstadoTurno.EN_ATENCION]],
+    );
+    return rows.map(aDominio);
+  }
 }
 
 function aDominio(f: FilaTurno): Turno {

@@ -18,6 +18,13 @@ export const ESTADOS_ACTIVOS: ReadonlySet<EstadoTurno> = new Set([
   EstadoTurno.EN_ATENCION,
 ]);
 
+/** Los que esperan su llamado: deben estar en la fila del motor. */
+export const ESTADOS_PENDIENTES: ReadonlySet<EstadoTurno> = new Set([
+  EstadoTurno.SOLICITADO,
+  EstadoTurno.EN_ESPERA,
+  EstadoTurno.PROXIMO,
+]);
+
 /** RN-04: transiciones válidas. Cualquier otra lanza TransicionInvalidaError. */
 export const TRANSICIONES: Readonly<Record<EstadoTurno, readonly EstadoTurno[]>> = {
   [EstadoTurno.SOLICITADO]: [EstadoTurno.EN_ESPERA, EstadoTurno.CANCELADO],
@@ -41,6 +48,12 @@ const NOMBRES_EVENTO: Readonly<Record<EstadoTurno, string>> = {
   [EstadoTurno.CANCELADO]: 'TurnoCancelado',
   [EstadoTurno.AUSENTE]: 'TurnoAusente',
 };
+
+/**
+ * Evento de una atención que cerró el sistema. El turno queda ATENDIDO, pero con su propio tipo
+ * para que la analítica no tome esas horas como duración de la atención.
+ */
+export const EVENTO_CIERRE_POR_SISTEMA = 'TurnoCerradoPorSistema';
 
 export function nombreEvento(estado: EstadoTurno): string {
   return NOMBRES_EVENTO[estado];

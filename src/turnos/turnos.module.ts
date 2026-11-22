@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ATENDER_TURNO, CONFIRMAR_PRESENCIA } from './application/ports/in/atender-turno.use-case';
 import { CANCELAR_TURNO } from './application/ports/in/cancelar-turno.use-case';
 import { CONSULTAR_CATALOGO } from './application/ports/in/consultar-catalogo.use-case';
+import { CONSULTAR_VENTANILLA } from './application/ports/in/consultar-ventanilla.use-case';
 import { CONSULTAR_FILA } from './application/ports/in/consultar-fila.use-case';
 import { REVISAR_VENCIMIENTOS } from './application/ports/in/revisar-vencimientos.use-case';
 import { CONSULTAR_MI_TURNO } from './application/ports/in/consultar-mi-turno.use-case';
@@ -32,6 +33,7 @@ import { TURNO_REPOSITORY, TurnoRepository } from './application/ports/out/turno
 import { AtenderTurnoService, ConfirmarPresenciaService } from './application/use-cases/atender-turno.service';
 import { CancelarTurnoService } from './application/use-cases/cancelar-turno.service';
 import { ConsultarCatalogoService } from './application/use-cases/consultar-catalogo.service';
+import { ConsultarVentanillaService } from './application/use-cases/consultar-ventanilla.service';
 import { ConsultarFilaService } from './application/use-cases/consultar-fila.service';
 import { RevisarVencimientosService } from './application/use-cases/revisar-vencimientos.service';
 import { ConsultarMiTurnoService } from './application/use-cases/consultar-mi-turno.service';
@@ -137,8 +139,14 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
         notificador: NotificadorPort,
         ids: GeneradorIdsPort,
         reloj: RelojPort,
-      ) => new LlamarSiguienteService(turnos, catalogo, motor, eventos, notificador, ids, reloj),
-      inject: [TURNO_REPOSITORY, CATALOGO, MOTOR_FILAS, EVENT_STORE, NOTIFICADOR, GENERADOR_IDS, RELOJ],
+        cerrojo: CerrojoPort,
+      ) => new LlamarSiguienteService(turnos, catalogo, motor, eventos, notificador, ids, reloj, cerrojo),
+      inject: [TURNO_REPOSITORY, CATALOGO, MOTOR_FILAS, EVENT_STORE, NOTIFICADOR, GENERADOR_IDS, RELOJ, CERROJO],
+    },
+    {
+      provide: CONSULTAR_VENTANILLA,
+      useFactory: (turnos: TurnoRepository) => new ConsultarVentanillaService(turnos),
+      inject: [TURNO_REPOSITORY],
     },
     {
       provide: CONSULTAR_MI_TURNO,

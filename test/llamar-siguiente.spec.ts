@@ -4,6 +4,7 @@ import { EstadoTurno } from '../src/turnos/domain/estado-turno';
 import { AGENCIA, armarEscenario, comando, OTRA_AGENCIA, SERVICIO } from './armar-escenario';
 
 const funcionario: Principal = { id: 'f1', roles: [{ rol: 'FUNCIONARIO', agenciaId: AGENCIA }] };
+const companero: Principal = { id: 'f3', roles: [{ rol: 'FUNCIONARIO', agenciaId: AGENCIA }] };
 const funcionarioDeOtraAgencia: Principal = { id: 'f2', roles: [{ rol: 'FUNCIONARIO', agenciaId: OTRA_AGENCIA }] };
 
 describe('Caso de uso LlamarSiguiente', () => {
@@ -13,12 +14,13 @@ describe('Caso de uso LlamarSiguiente', () => {
     const preferencial = await e.solicitar.ejecutar(comando('mayor', 'k2'));
 
     const primero = await e.llamar.ejecutar({ agenciaId: AGENCIA, servicioId: SERVICIO, funcionario });
-    const segundo = await e.llamar.ejecutar({ agenciaId: AGENCIA, servicioId: SERVICIO, funcionario });
+    const segundo = await e.llamar.ejecutar({ agenciaId: AGENCIA, servicioId: SERVICIO, funcionario: companero });
 
     expect(primero?.id).toBe(preferencial.id);
     expect(primero?.estado).toBe(EstadoTurno.LLAMADO);
     expect(segundo?.id).toBe(general.id);
-    expect(await e.llamar.ejecutar({ agenciaId: AGENCIA, servicioId: SERVICIO, funcionario })).toBeNull();
+    const tercero: Principal = { id: 'f4', roles: funcionario.roles };
+    expect(await e.llamar.ejecutar({ agenciaId: AGENCIA, servicioId: SERVICIO, funcionario: tercero })).toBeNull();
   });
 
   it('un funcionario de otra agencia no puede llamar (RN-14)', async () => {

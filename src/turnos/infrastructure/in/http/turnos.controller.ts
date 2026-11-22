@@ -10,9 +10,11 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiHeader, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiHeader, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import type { Principal } from '../../../../compartido/domain/principal';
 import { JwtAuthGuard } from '../../../../compartido/infrastructure/auth/jwt-auth.guard';
 import { PrincipalActual, Roles, RolesGuard } from '../../../../compartido/infrastructure/auth/roles';
@@ -27,6 +29,10 @@ import {
   CONSULTAR_MI_TURNO,
   ConsultarMiTurnoUseCase,
 } from '../../../application/ports/in/consultar-mi-turno.use-case';
+import {
+  CONSULTAR_VENTANILLA,
+  ConsultarVentanillaUseCase,
+} from '../../../application/ports/in/consultar-ventanilla.use-case';
 import { SOLICITAR_TURNO, SolicitarTurnoUseCase } from '../../../application/ports/in/solicitar-turno.use-case';
 import { MiTurnoDto, ResumenTurnoDto, SolicitarTurnoDto, VerificarPreferencialDto } from './dtos';
 
@@ -45,6 +51,7 @@ export class TurnosController {
     @Inject(SOLICITAR_TURNO) private readonly solicitar: SolicitarTurnoUseCase,
     @Inject(CANCELAR_TURNO) private readonly cancelar: CancelarTurnoUseCase,
     @Inject(CONSULTAR_MI_TURNO) private readonly consultar: ConsultarMiTurnoUseCase,
+    @Inject(CONSULTAR_VENTANILLA) private readonly ventanilla: ConsultarVentanillaUseCase,
     @Inject(CONFIRMAR_PRESENCIA) private readonly confirmar: ConfirmarPresenciaUseCase,
     @Inject(ATENDER_TURNO) private readonly atender: AtenderTurnoUseCase,
   ) {}
@@ -77,6 +84,20 @@ export class TurnosController {
   async miTurno(@PrincipalActual() principal: Principal) {
     const turno = await this.consultar.ejecutar(principal.id);
     if (!turno) throw new NotFoundException('No tienes un turno activo');
+    return turno;
+  }
+
+  @Get('en-ventanilla')
+  @Roles('FUNCIONARIO', 'ADMIN_AGENCIA')
+  @ApiOperation({ summary: 'CU-04: el turno que el funcionario tiene llamado o en atención' })
+  @ApiOkResponse({ type: ResumenTurnoDto })
+  @ApiNoContentResponse({ description: 'No tiene turno en ventanilla' })
+  async enVentanilla(@PrincipalActual() principal: Principal, @Res({ passthrough: true }) respuesta: Response) {
+    const turno = await this.ventanilla.ejecutar(principal);
+    if (!turno) {
+      respuesta.status(204);
+      return undefined;
+    }
     return turno;
   }
 

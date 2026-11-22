@@ -14,4 +14,8 @@ export interface TurnoRepository {
   buscarActivoDeAsociado(asociadoId: string): Promise<Turno | null>;
   /** Turnos de un día (hora local) en esos estados; con agencia, solo los de esa agencia (cierre). */
   buscarDelDiaPorEstado(fecha: string, estados: EstadoTurno[], agenciaId?: string): Promise<Turno[]>;
+  /** Turnos de ese día o de días anteriores en esos estados: así ninguno queda fuera de la revisión. */
+  buscarHastaDiaPorEstado(fecha: string, estados: EstadoTurno[]): Promise<Turno[]>;
+  /** Llamados o en atención que tiene ese funcionario, del más antiguo al más reciente. */
+  buscarEnVentanilla(funcionarioId: string): Promise<Turno[]>;
 }

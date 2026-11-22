@@ -1,6 +1,6 @@
 import { ReglaNegocioError, TransicionInvalidaError } from '../../compartido/domain/errores';
 import { fechaLocal } from '../../compartido/domain/tiempo';
-import { ESTADOS_ACTIVOS, EstadoTurno, nombreEvento, TRANSICIONES } from './estado-turno';
+import { ESTADOS_ACTIVOS, ESTADOS_PENDIENTES, EstadoTurno, EVENTO_CIERRE_POR_SISTEMA, nombreEvento, TRANSICIONES } from './estado-turno';
 import type { EventoTurno } from './evento-turno';
 import type { Canal, TipoAtencion } from './tipos';
 
@@ -96,6 +96,10 @@ export class Turno {
   get filaId(): string {
     return `${this.d.agenciaId}:${this.d.servicioId}`;
   }
+  /** Día de servicio (AAAA-MM-DD, hora local). */
+  get fecha(): string {
+    return this.d.fecha;
+  }
   get estado(): EstadoTurno {
     return this.d.estado;
   }
@@ -120,6 +124,10 @@ export class Turno {
 
   estaActivo(): boolean {
     return ESTADOS_ACTIVOS.has(this.d.estado);
+  }
+
+  estaPendiente(): boolean {
+    return ESTADOS_PENDIENTES.has(this.d.estado);
   }
 
   perteneceA(asociadoId: string): boolean {
@@ -180,6 +188,13 @@ export class Turno {
     return true;
   }
 
+  /** RN-13: nadie finalizó la atención. Sin actor: lo hace el sistema. */
+  cerrarAtencionOlvidada(motivo: string, ahora: Date): void {
+    this.cambiarA(EstadoTurno.ATENDIDO, null, ahora, EVENTO_CIERRE_POR_SISTEMA);
+    this.d.motivo = motivo;
+    this.d.finEn = ahora;
+  }
+
   /** Idempotente. RN-12: al cancelarse, el turno sale de la fila y libera RN-01. */
   cancelar(motivo: string, actorId: string | null, ahora: Date): boolean {
     if (this.d.estado === EstadoTurno.CANCELADO) return false;
@@ -231,13 +246,13 @@ export class Turno {
     return { ...this.d };
   }
 
-  private cambiarA(nuevo: EstadoTurno, actorId: string | null, ahora: Date): void {
+  private cambiarA(nuevo: EstadoTurno, actorId: string | null, ahora: Date, tipoEvento = nombreEvento(nuevo)): void {
     const actual = this.d.estado;
     if (!TRANSICIONES[actual].includes(nuevo)) {
       throw new TransicionInvalidaError(actual, nuevo);
     }
     this.d.estado = nuevo;
-    this.registrar(actual, nuevo, actorId, ahora);
+    this.registrar(actual, nuevo, actorId, ahora, tipoEvento);
   }
 
   private registrar(

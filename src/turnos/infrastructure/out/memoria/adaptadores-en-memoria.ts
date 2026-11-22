@@ -23,6 +23,7 @@ import type { TurnoRepository } from '../../../application/ports/out/turno.repos
 import type { ResumenTurno } from '../../../application/resumen-turno';
 import type { EventoTurnoPublicable } from '../../../domain/evento-turno';
 import type { Fila } from '../../../domain/fila';
+import { EstadoTurno } from '../../../domain/estado-turno';
 import type { TipoAtencion } from '../../../domain/tipos';
 import { DatosTurno, Turno } from '../../../domain/turno';
 
@@ -78,6 +79,19 @@ export class TurnoRepositoryEnMemoria implements TurnoRepository {
   async buscarDelDiaPorEstado(fecha: string, estados: string[], agenciaId?: string): Promise<Turno[]> {
     return [...this.datos.values()]
       .filter((t) => t.fecha === fecha && estados.includes(t.estado) && (!agenciaId || t.agenciaId === agenciaId))
+      .map((t) => Turno.reconstruir(t));
+  }
+
+  async buscarHastaDiaPorEstado(fecha: string, estados: string[]): Promise<Turno[]> {
+    return [...this.datos.values()]
+      .filter((t) => t.fecha <= fecha && estados.includes(t.estado))
+      .map((t) => Turno.reconstruir(t));
+  }
+
+  async buscarEnVentanilla(funcionarioId: string): Promise<Turno[]> {
+    return [...this.datos.values()]
+      .filter((t) => t.atendidoPor === funcionarioId && (t.estado === EstadoTurno.LLAMADO || t.estado === EstadoTurno.EN_ATENCION))
+      .sort((a, b) => a.llamadoEn!.getTime() - b.llamadoEn!.getTime())
       .map((t) => Turno.reconstruir(t));
   }
 }

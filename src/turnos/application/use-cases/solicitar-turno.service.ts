@@ -15,6 +15,7 @@ import type {
   RelojPort,
 } from '../ports/out/otros.ports';
 import type { TurnoRepository } from '../ports/out/turno.repository';
+import { esCambioSimultaneo } from '../cambiar-turno';
 import { resumir, ResumenTurno } from '../resumen-turno';
 import { publicarEventos } from './publicar-eventos';
 
@@ -101,12 +102,32 @@ export class SolicitarTurnoService implements SolicitarTurnoUseCase {
     if (fila.debeMarcarseProximo(encolado.personasDelante)) {
       turno.marcarProximo(ahora);
     }
-    await this.turnos.actualizar(turno);
+    try {
+      await this.turnos.actualizar(turno);
+    } catch (error) {
+      if (!esCambioSimultaneo(error)) throw error;
+      return this.alguienSeAdelanto(turno);
+    }
     await publicarEventos(turno, this.eventos, this.ids);
 
     const resumen = resumir(turno, encolado.personasDelante);
     await this.notificador.filaActualizada(fila.id);
     await this.notificador.turnoActualizado(turno.asociadoId, resumen);
     return resumen;
+  }
+
+  /**
+   * Entre encolar y guardar lo llamaron, lo cancelaron o cerró la agencia: manda ese cambio. De
+   * esta solicitud solo falta su primer evento; los demás los publicó quien hizo el cambio.
+   */
+  private async alguienSeAdelanto(turno: Turno): Promise<ResumenTurno> {
+    const solicitud = turno.extraerEventos().filter((evento) => evento.estadoAnterior === null);
+    await this.eventos.publicar(solicitud.map((evento) => ({ ...evento, eventoId: this.ids.nuevo() })));
+
+    const vigente = (await this.turnos.obtener(turno.id)) ?? turno;
+    // Si terminó antes de entrar a la fila, quien lo terminó no tenía qué retirar.
+    if (!vigente.estaPendiente()) await this.motor.retirar(vigente.filaId, vigente.id).catch(() => undefined);
+    await this.notificador.filaActualizada(vigente.filaId);
+    return resumir(vigente, null);
   }
 }

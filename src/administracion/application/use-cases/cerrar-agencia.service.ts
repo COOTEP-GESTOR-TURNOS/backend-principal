@@ -18,22 +18,29 @@ import type {
 import type { TurnoRepository } from '../../../turnos/application/ports/out/turno.repository';
 import { resumir } from '../../../turnos/application/resumen-turno';
 import { publicarEventos } from '../../../turnos/application/use-cases/publicar-eventos';
-import { EstadoTurno } from '../../../turnos/domain/estado-turno';
+import { ESTADOS_PENDIENTES, EstadoTurno } from '../../../turnos/domain/estado-turno';
 import type { Turno } from '../../../turnos/domain/turno';
 import type { CerrarAgenciaUseCase, ResultadoCierre } from '../ports/in/cerrar-agencia.use-case';
 import type { AgenciasAdminRepository } from '../ports/out/agencias-admin.repository';
 
 export const MOTIVO_CIERRE = 'CIERRE_AGENCIA';
 const SISTEMA = '00000000-0000-0000-0000-000000000000';
-const PENDIENTES = [EstadoTurno.SOLICITADO, EstadoTurno.EN_ESPERA, EstadoTurno.PROXIMO];
-/** El cerrojo diario dura más que un día: el cierre automático corre una sola vez por fecha. */
-const TTL_CIERRE_DIARIO_SEG = 36 * 60 * 60;
+const PENDIENTES = [...ESTADOS_PENDIENTES];
+/**
+ * El cerrojo solo evita dos cierres a la vez. Que sea uno por día lo garantiza la marca de jornada
+ * cerrada; si el proceso muere antes de ponerla, otro ciclo reintenta cuando el cerrojo vence.
+ */
+const TTL_CIERRE_SEG = 5 * 60;
 
 /**
  * Cierre de la jornada de una agencia (RN-13). Primero el motor vacía en paralelo todas sus
  * filas: desde ese momento nadie puede llamar un turno pendiente. Después cada turno pendiente
  * queda CANCELADO con motivo CIERRE_AGENCIA, en paralelo y con bloqueo optimista, y su asociado
  * recibe el aviso. Los turnos llamados o en atención siguen hasta terminar.
+ *
+ * Ningún pendiente sobrevive a su jornada: cada ciclo automático cancela primero los rezagados,
+ * que son los de días anteriores (backend apagado al cierre) y los de una jornada de hoy ya
+ * cerrada (cierre que falló a la mitad).
  */
 export class CerrarAgenciaService implements CerrarAgenciaUseCase {
   constructor(
@@ -70,8 +77,7 @@ export class CerrarAgenciaService implements CerrarAgenciaUseCase {
     }
 
     const pendientes = await this.turnos.buscarDelDiaPorEstado(fecha, PENDIENTES, agenciaId);
-    const resultados = await Promise.allSettled(pendientes.map((t) => this.cancelar(t, actor?.id ?? null, ahora)));
-    const cancelados = resultados.filter((r) => r.status === 'fulfilled' && r.value).length;
+    const cancelados = await this.cancelarTodos(pendientes, actor?.id ?? null, ahora);
     const enAtencion = await this.turnos.buscarDelDiaPorEstado(fecha, [EstadoTurno.LLAMADO, EstadoTurno.EN_ATENCION], agenciaId);
     await Promise.allSettled(agencia.servicios.map((s) => this.notificador.filaActualizada(`${agenciaId}:${s.servicioId}`)));
 
@@ -94,14 +100,14 @@ export class CerrarAgenciaService implements CerrarAgenciaUseCase {
     const ahora = this.reloj.ahora();
     const fecha = fechaLocal(ahora);
     const hora = horaLocal(ahora);
-    const resultados: ResultadoCierre[] = [];
+    const resultados = await this.cancelarRezagados(ahora, fecha);
     for (const agencia of await this.catalogo.listarAgencias()) {
       if (agencia.servicios.length === 0) continue;
       const fila = await this.catalogo.obtenerFila(agencia.id, agencia.servicios[0].id);
       if (!fila || hora < fila.horario.cierre) continue;
       if (await this.jornadas.estaCerrada(agencia.id, fecha)) continue; // el directivo ya la cerró hoy
       const nombreCerrojo = `cierre:${agencia.id}:${fecha}`;
-      if (!(await this.cerrojo.tomar(nombreCerrojo, TTL_CIERRE_DIARIO_SEG))) continue; // ya cerrada hoy
+      if (!(await this.cerrojo.tomar(nombreCerrojo, TTL_CIERRE_SEG))) continue; // otro ciclo la está cerrando
       try {
         resultados.push(await this.cerrarJornada(null, agencia.id));
       } catch {
@@ -122,6 +128,63 @@ export class CerrarAgenciaService implements CerrarAgenciaUseCase {
 
   jornadaCerrada(agenciaId: string): Promise<boolean> {
     return this.jornadas.estaCerrada(agenciaId, fechaLocal(this.reloj.ahora()));
+  }
+
+  /** Un resultado, con su auditoría, por cada agencia y día que tenía rezagados. */
+  private async cancelarRezagados(ahora: Date, hoy: string): Promise<ResultadoCierre[]> {
+    const porJornada = new Map<string, Turno[]>();
+    for (const turno of await this.turnos.buscarHastaDiaPorEstado(hoy, PENDIENTES)) {
+      const clave = `${turno.agenciaId}:${turno.fecha}`;
+      porJornada.set(clave, [...(porJornada.get(clave) ?? []), turno]);
+    }
+
+    const resultados: ResultadoCierre[] = [];
+    for (const rezagados of porJornada.values()) {
+      const { agenciaId, fecha } = rezagados[0];
+      try {
+        // La marca se lee después que los turnos: si reabrieron la jornada, los nuevos no se tocan.
+        if (fecha === hoy && !(await this.jornadas.estaCerrada(agenciaId, fecha))) continue;
+        const resultado = await this.cerrarRezagados(agenciaId, fecha, rezagados, ahora);
+        if (resultado) resultados.push(resultado);
+      } catch {
+        // Un fallo en una agencia no detiene a las demás; se reintenta en el siguiente ciclo.
+      }
+    }
+    return resultados;
+  }
+
+  private async cerrarRezagados(agenciaId: string, fecha: string, rezagados: Turno[], ahora: Date): Promise<ResultadoCierre | null> {
+    const agencia = await this.cargar(agenciaId);
+    const inicio = Date.now();
+    // Uno por uno y no vaciando la agencia: en sus filas puede haber turnos válidos de hoy.
+    const retiros = await Promise.allSettled(rezagados.map((t) => this.motor.retirar(t.filaId, t.id)));
+    const duracionMotorMs = Date.now() - inicio;
+    const retirados = rezagados.filter((_, i) => retiros[i].status === 'fulfilled');
+    const cancelados = await this.cancelarTodos(retirados, null, ahora);
+    if (cancelados === 0) return null;
+
+    const enAtencion = await this.turnos.buscarDelDiaPorEstado(fecha, [EstadoTurno.LLAMADO, EstadoTurno.EN_ATENCION], agenciaId);
+    const filas = new Set(retirados.map((t) => t.filaId));
+    await Promise.allSettled([...filas].map((filaId) => this.notificador.filaActualizada(filaId)));
+
+    const resultado: ResultadoCierre = {
+      agenciaId,
+      nombre: agencia.nombre,
+      fecha,
+      automatico: true,
+      cancelados,
+      retiradosDelMotor: retirados.length,
+      duracionMotorMs,
+      siguenEnAtencion: enAtencion.length,
+    };
+    const { agenciaId: _a, nombre: _n, ...detalle } = resultado;
+    await this.auditar(null, 'JORNADA_CERRADA', agenciaId, detalle);
+    return resultado;
+  }
+
+  private async cancelarTodos(turnos: Turno[], actorId: string | null, ahora: Date): Promise<number> {
+    const resultados = await Promise.allSettled(turnos.map((t) => this.cancelar(t, actorId, ahora)));
+    return resultados.filter((r) => r.status === 'fulfilled' && r.value).length;
   }
 
   /** RN-15: fuera de su agencia, 403 y registro en la auditoría. */

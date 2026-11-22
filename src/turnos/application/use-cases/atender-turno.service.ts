@@ -10,6 +10,7 @@ import type { EventStorePort, GeneradorIdsPort, NotificadorPort, RelojPort } fro
 import type { TurnoRepository } from '../ports/out/turno.repository';
 import { resumir, ResumenTurno } from '../resumen-turno';
 import { publicarEventos } from './publicar-eventos';
+import { esCambioSimultaneo } from '../cambiar-turno';
 
 /** CU-04: iniciar, finalizar, marcar ausente o verificar la atención preferencial. */
 export class AtenderTurnoService implements AtenderTurnoUseCase {
@@ -22,7 +23,7 @@ export class AtenderTurnoService implements AtenderTurnoUseCase {
     private readonly reloj: RelojPort,
   ) {}
 
-  async ejecutar(comando: AtenderTurnoComando): Promise<ResumenTurno> {
+  async ejecutar(comando: AtenderTurnoComando, reintentos = 3): Promise<ResumenTurno> {
     const turno = await this.turnos.obtener(comando.turnoId);
     if (!turno) throw new NoEncontradoError('TURNO_NO_EXISTE', 'No existe ese turno');
     // RN-14: solo los funcionarios de esa agencia y servicio atienden el turno.
@@ -51,7 +52,18 @@ export class AtenderTurnoService implements AtenderTurnoUseCase {
         break;
     }
 
-    await this.turnos.actualizar(turno);
+    try {
+      await this.turnos.actualizar(turno);
+    } catch (error) {
+      // El turno cambió en ese instante (por ejemplo, el asociado confirmó): se relee y se decide otra vez.
+      if (esCambioSimultaneo(error) && reintentos > 0) return this.ejecutar(comando, reintentos - 1);
+      throw error;
+    }
+    if (comando.accion === 'VERIFICAR_PREFERENCIAL' && comando.cumplePreferencial === false) {
+      // Encolar es idempotente. Se repite porque, mientras se guardaba, otro llamado pudo sacarlo
+      // y saltarlo: todavía figuraba como Llamado.
+      await this.motor.encolar(turno.filaId, turno.id, 'GENERAL', 1).catch(() => undefined);
+    }
     await publicarEventos(turno, this.eventos, this.ids);
     const resumen = resumir(turno, null);
     await this.notificador.turnoActualizado(turno.asociadoId, resumen);
