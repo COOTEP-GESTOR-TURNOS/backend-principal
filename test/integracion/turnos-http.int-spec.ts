@@ -169,6 +169,29 @@ describe('Turnos por HTTP con PostgreSQL y Redis reales', () => {
     });
   });
 
+  describe('RN-10: confirmación del turno', () => {
+    it('«mi turno» la informa a cualquier dispositivo y fuera de plazo responde 422', async () => {
+      const ana = await e.crearPersona('Ana Confirmación');
+      const turno = await pedirTurno(ana);
+      // Se fija el estado en la base: no depende de cuántos turnos dejaron las otras pruebas en la fila.
+      const proximoHace = (minutos: number) =>
+        e.pool.query("UPDATE turno SET estado = 'PROXIMO', proximo_en = $2, version = version + 1 WHERE id = $1", [
+          turno.cuerpo.id,
+          new Date(e.reloj.ahora().getTime() - minutos * 60_000),
+        ]);
+      const confirmar = () => e.pedir('POST', `/turnos/${turno.cuerpo.id}/confirmar`, { token: ana.token });
+      const miTurno = () => e.pedir('GET', '/turnos/mio', { token: ana.token });
+
+      await proximoHace(10);
+      expect(await confirmar()).toMatchObject({ status: 422, cuerpo: { codigo: 'PLAZO_CONFIRMACION_VENCIDO' } });
+      expect((await miTurno()).cuerpo).toMatchObject({ confirmado: false });
+
+      await proximoHace(1);
+      expect((await confirmar()).cuerpo).toMatchObject({ confirmado: true });
+      expect((await miTurno()).cuerpo).toMatchObject({ confirmado: true });
+    });
+  });
+
   describe('PR-15 (integración): dos solicitudes simultáneas del mismo asociado', () => {
     it('una entra (201) y la otra recibe 409 TURNO_ACTIVO; en PostgreSQL queda un solo turno activo', async () => {
       const carla = await e.crearPersona('Carla Prueba');

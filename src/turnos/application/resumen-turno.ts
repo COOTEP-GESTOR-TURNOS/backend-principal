@@ -11,6 +11,8 @@ export interface ResumenTurno {
   agenciaId: string;
   servicioId: string;
   personasDelante: number | null;
+  /** RN-10: ya confirmó que viene. Así lo saben todos sus dispositivos. */
+  confirmado: boolean;
   /** Por qué terminó: CANCELADO_POR_ASOCIADO, SIN_CONFIRMAR, NO_SE_PRESENTO, ... */
   motivo: string | null;
 }
@@ -24,6 +26,7 @@ export function resumir(turno: Turno, personasDelante: number | null): ResumenTu
     agenciaId: turno.agenciaId,
     servicioId: turno.servicioId,
     personasDelante,
+    confirmado: turno.confirmado,
     motivo: turno.motivo,
   };
 }

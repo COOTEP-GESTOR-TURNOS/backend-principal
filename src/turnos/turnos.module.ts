@@ -175,12 +175,13 @@ import { NotificadorSocketAdapter } from './infrastructure/out/socketio/notifica
       provide: CONFIRMAR_PRESENCIA,
       useFactory: (
         turnos: TurnoRepository,
+        catalogo: CatalogoPort,
         eventos: EventStorePort,
         notificador: NotificadorPort,
         ids: GeneradorIdsPort,
         reloj: RelojPort,
-      ) => new ConfirmarPresenciaService(turnos, eventos, notificador, ids, reloj),
-      inject: [TURNO_REPOSITORY, EVENT_STORE, NOTIFICADOR, GENERADOR_IDS, RELOJ],
+      ) => new ConfirmarPresenciaService(turnos, catalogo, eventos, notificador, ids, reloj),
+      inject: [TURNO_REPOSITORY, CATALOGO, EVENT_STORE, NOTIFICADOR, GENERADOR_IDS, RELOJ],
     },
   ],
   // La analítica reutiliza el catálogo (con su caché) y el reloj para validar filas y horarios.

@@ -37,6 +37,7 @@ export class ResumenTurnoDto {
   @ApiProperty({ format: 'uuid' }) agenciaId: string;
   @ApiProperty({ format: 'uuid' }) servicioId: string;
   @ApiProperty({ nullable: true }) personasDelante: number | null;
+  @ApiProperty({ description: 'RN-10: el asociado ya confirmó que viene' }) confirmado: boolean;
 }
 
 export class MiTurnoDto extends ResumenTurnoDto {

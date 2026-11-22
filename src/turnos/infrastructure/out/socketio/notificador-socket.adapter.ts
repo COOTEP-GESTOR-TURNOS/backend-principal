@@ -17,7 +17,7 @@ export class NotificadorSocketAdapter implements NotificadorPort {
     const sala = this.gateway.servidor?.to(`usuario:${asociadoId}`);
     if (!sala) return;
     sala.emit('turno:estado', resumen);
-    if (resumen.estado === EstadoTurno.PROXIMO) sala.emit('turno:proximo', resumen);
+    if (resumen.estado === EstadoTurno.PROXIMO && !resumen.confirmado) sala.emit('turno:proximo', resumen);
     if (resumen.estado === EstadoTurno.LLAMADO) sala.emit('turno:llamado', resumen);
   }
 }

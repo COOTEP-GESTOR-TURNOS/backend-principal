@@ -31,6 +31,13 @@ src/
 Regla: `domain/` y `application/` no importan NestJS, `pg`, `mongodb` ni clientes HTTP. Las
 dependencias apuntan hacia el dominio y los casos de uso se prueban con adaptadores en memoria.
 
+## Confirmación (RN-10)
+
+Todo resumen de turno (respuestas y aviso `turno:estado`) trae `confirmado`: los clientes lo leen y
+no lo guardan por su cuenta. Confirmar un turno Próximo fuera de `T_CONFIRMACION_MIN` responde
+`422 PLAZO_CONFIRMACION_VENCIDO`, aunque la revisión periódica todavía no lo haya vencido. El evento
+`turno:proximo`, que pide confirmar, no se emite para un turno ya confirmado.
+
 ## Desarrollo
 
 ```bash
